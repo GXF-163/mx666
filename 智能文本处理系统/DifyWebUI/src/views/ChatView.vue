@@ -1,100 +1,152 @@
 <template>
   <div class="chat-container">
     <div ref="chatContainerRef" class="messages-container">
-      <div v-if="hasMessages" class="clear-bar">
-        <el-button class="clear-button" @click="handleClearChat" size="small">
-          <el-icon><Delete /></el-icon>
-          <span>清除对话</span>
-        </el-button>
-      </div>
-      <!-- Empty state -->
+      <!-- 空状态 - 豆包风格欢迎页 -->
       <div v-if="!hasMessages" class="empty-state">
-        <div class="welcome-message">
-          <h2>欢迎使用智能文本处理系统</h2>
-          <p>上传文件并输入提示词，即可对文档进行总结、分析等智能处理；也可直接输入问题与系统对话。</p>
-        </div>
-        
-        <div class="examples-container">
-          <h3>选择任务类型：</h3>
-          <div class="example-prompts">
-            <div 
-              v-for="(task, index) in taskList" 
-              :key="index" 
-              class="example-prompt"
-              @click="openTaskDialog(task)"
-            >
-              <el-icon><ChatDotRound /></el-icon>
-              <span>{{ task.label }}</span>
+        <div class="welcome-content">
+          <div class="welcome-header">
+            <div class="welcome-icon">
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" fill="url(#gradient)"/>
+                <path d="M12 6c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6-2.69-6-6-6z" fill="white" fill-opacity="0.3"/>
+                <defs>
+                  <linearGradient id="gradient" x1="4" y1="4" x2="20" y2="20" gradientUnits="userSpaceOnUse">
+                    <stop stop-color="#4F46E5"/>
+                    <stop offset="1" stop-color="#06B6D4"/>
+                  </linearGradient>
+                </defs>
+              </svg>
             </div>
+            <h1 class="welcome-title">
+              我是你的
+              <span class="gradient-text">智能助手</span>
+            </h1>
+            <p class="welcome-subtitle">
+              上传文档或直接输入问题，我会帮你总结、分析和提取关键信息
+            </p>
           </div>
-        </div>
 
-        <!-- 候选提示词弹窗 -->
-        <el-dialog
-          v-model="promptDialogVisible"
-          :title="currentTask ? currentTask.label : '选择提示词'"
-          width="500px"
-          class="prompt-dialog"
-          @closed="currentTask = null"
-        >
-          <p class="prompt-dialog-hint">点击一条提示词，将自动填入下方输入框</p>
-          <div class="candidate-prompts">
+          <!-- 快捷功能卡片 -->
+          <div class="feature-cards">
             <div
-              v-for="(prompt, idx) in currentTask?.prompts ?? []"
-              :key="idx"
-              class="candidate-item"
-              @click="applyPromptAndClose(prompt)"
+              v-for="(feature, index) in features"
+              :key="index"
+              class="feature-card"
+              @click="quickStart(feature.prompt)"
             >
-              {{ prompt }}
+              <div class="feature-icon" :style="{ background: feature.gradient }">
+                <el-icon :size="24" color="white">
+                  <component :is="feature.icon" />
+                </el-icon>
+              </div>
+              <div class="feature-content">
+                <div class="feature-title">{{ feature.title }}</div>
+                <div class="feature-desc">{{ feature.desc }}</div>
+              </div>
             </div>
           </div>
-        </el-dialog>
-      </div>
 
-      <!-- Chat messages -->
-      <template v-else>
-        <MessageItem 
-          v-for="(message, index) in chatMessages" 
-          :key="index" 
-          :message="message" 
-        />
-      </template>
-
-      <!-- Loading indicator -->
-      <div v-if="isLoading && hasUserInput" class="loading-container">
-        <div class="loading-indicator">
-          <span>正在处理您的请求...</span>
+          <!-- 示例提示词 -->
+          <div class="example-section">
+            <div class="example-title">试试这些示例：</div>
+            <div class="example-chips">
+              <div
+                v-for="(example, idx) in examples"
+                :key="idx"
+                class="example-chip"
+                @click="quickStart(example)"
+              >
+                {{ example }}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
-      <!-- Error message -->
-      <div v-if="error" class="error-message">
-        <el-alert
-          title="出错了"
-          type="error"
-          :description="error"
-          show-icon
-          :closable="false"
-        />
-      </div>
+      <!-- 聊天消息列表 -->
+      <template v-else>
+        <!-- 清除按钮 -->
+        <div class="chat-header">
+          <el-button
+            class="clear-button"
+            @click="handleClearChat"
+            size="small"
+            text
+          >
+            <el-icon><Delete /></el-icon>
+            <span>新对话</span>
+          </el-button>
+        </div>
+
+        <!-- 消息列表 -->
+        <div class="messages-list">
+          <MessageItem
+            v-for="(message, index) in chatMessages"
+            :key="index"
+            :message="message"
+          />
+        </div>
+
+        <!-- 加载指示器 -->
+        <div v-if="isLoading && hasUserInput" class="loading-container">
+          <div class="loading-indicator">
+            <div class="loading-dots">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+            <span class="loading-text">正在思考...</span>
+          </div>
+        </div>
+
+        <!-- 错误消息 -->
+        <div v-if="error" class="error-container">
+          <el-alert
+            :title="error"
+            type="error"
+            show-icon
+            :closable="false"
+            class="error-alert"
+          >
+            <template #default>
+              <div class="error-actions">
+                <el-button size="small" @click="retryLastMessage">重试</el-button>
+              </div>
+            </template>
+          </el-alert>
+        </div>
+      </template>
     </div>
 
-    <div class="input-container">
-      <MessageInput 
-        ref="messageInputRef"
-        :disabled="isLoading" 
-        @send="handleSendMessage" 
-      />
+    <!-- 输入区域 -->
+    <div class="input-wrapper">
+      <div class="input-container">
+        <MessageInput
+          ref="messageInputRef"
+          :disabled="isLoading"
+          @send="handleSendMessage"
+        />
+      </div>
+      <div class="input-footer">
+        <span class="footer-hint">AI 生成内容仅供参考</span>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, nextTick, watch } from 'vue';
+import { ref, computed, onMounted, nextTick, watch } from 'vue';
 import { useChatStore } from '../stores/chat';
 import MessageInput from '../components/MessageInput.vue';
 import MessageItem from '../components/MessageItem.vue';
-import { Delete, ChatDotRound } from '@element-plus/icons-vue';
+import {
+  Delete,
+  Document,
+  EditPen,
+  Search,
+  MagicStick,
+  ChatDotRound
+} from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 
 const chatStore = useChatStore();
@@ -104,76 +156,80 @@ const error = computed(() => chatStore.error);
 const chatContainerRef = ref<HTMLElement | null>(null);
 const messageInputRef = ref<InstanceType<typeof MessageInput> | null>(null);
 
-/** 四个任务，每个任务对应多条候选提示词 */
-interface TaskItem {
-  label: string;
-  prompts: string[];
-}
-const taskList = ref<TaskItem[]>([
+// 功能特性
+const features = [
   {
-    label: '文档总结',
-    prompts: [
-      '请你用严肃的语言总结这些文件的主要内容。',
-      '请用简洁的 bullet 要点总结上述文档。',
-      '请概括每段的核心观点，并给出整体结论。'
-    ]
+    title: '文档总结',
+    desc: '上传文档，快速生成摘要',
+    icon: Document,
+    prompt: '请总结以下文档的主要内容',
+    gradient: 'linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)'
   },
   {
-    label: '内容分析',
-    prompts: [
-      '请分析这些文本的逻辑结构和论证方式。',
-      '请指出文中的关键论据与可能的疏漏。',
-      '请从多角度分析这些材料的异同。'
-    ]
+    title: '智能分析',
+    desc: '深度分析文本结构和逻辑',
+    icon: Search,
+    prompt: '请分析这段文本的逻辑结构',
+    gradient: 'linear-gradient(135deg, #06B6D4 0%, #3B82F6 100%)'
   },
   {
-    label: '问答与提取',
-    prompts: [
-      '请根据文档回答：文中提到的主要人物/事件有哪些？',
-      '请提取文中的数字、日期、专有名词等关键信息。',
-      '请列出文档中所有重要结论或建议。'
-    ]
+    title: '内容改写',
+    desc: '调整语气风格，优化表达',
+    icon: EditPen,
+    prompt: '请用更专业的语言改写以下内容',
+    gradient: 'linear-gradient(135deg, #10B981 0%, #06B6D4 100%)'
   },
   {
-    label: '创意与改写',
-    prompts: [
-      '请用更通俗的语言重写以下内容，便于大众理解。',
-      '请将上述内容改写成一份简短的汇报摘要。',
-      '请用更正式/学术的语言重新表述这些要点。'
-    ]
+    title: '创意生成',
+    desc: '激发灵感，辅助创作',
+    icon: MagicStick,
+    prompt: '请基于以下内容提供创意建议',
+    gradient: 'linear-gradient(135deg, #F59E0B 0%, #EF4444 100%)'
   }
-]);
+];
 
-const promptDialogVisible = ref(false);
-const currentTask = ref<TaskItem | null>(null);
+// 示例提示词
+const examples = [
+  '总结这份合同的关键条款',
+  '提取这段文字的核心观点',
+  '将这段内容改写成正式报告',
+  '分析这份数据表格的趋势',
+  '为这篇文章生成标题',
+  '翻译这段英文并总结要点'
+];
 
 const hasMessages = computed(() => chatMessages.value.length > 0);
 const hasUserInput = computed(() => chatMessages.value.some(m => m.role === 'user'));
 
-function openTaskDialog(task: TaskItem) {
-  currentTask.value = task;
-  promptDialogVisible.value = true;
-}
-
-function applyPromptAndClose(prompt: string) {
+// 快速开始
+const quickStart = (prompt: string) => {
   messageInputRef.value?.setPrompt(prompt);
-  promptDialogVisible.value = false;
-}
+};
 
+// 重试上一条消息
+const retryLastMessage = () => {
+  chatStore.retryLastMessage();
+};
+
+// 滚动到底部
 const scrollToBottom = async () => {
   await nextTick();
   if (chatContainerRef.value) {
     const container = chatContainerRef.value;
-    container.scrollTop = container.scrollHeight;
+    container.scrollTo({
+      top: container.scrollHeight,
+      behavior: 'smooth'
+    });
   }
 };
 
+// 发送消息
 const handleSendMessage = async (data: { text: string; files: File[] }) => {
   if (!data.text.trim() && data.files.length === 0) {
-    ElMessage.warning('提示词为空！！');
+    ElMessage.warning('请输入内容或上传文件');
     return;
   }
-  
+
   try {
     await chatStore.sendMessage(data.text, data.files);
     await scrollToBottom();
@@ -182,17 +238,17 @@ const handleSendMessage = async (data: { text: string; files: File[] }) => {
   }
 };
 
+// 清除聊天
 const handleClearChat = () => {
   chatStore.clearMessages();
+  ElMessage.success('已开启新对话');
 };
 
-
 onMounted(() => {
-  // 加载页面时滚动到底部
   scrollToBottom();
 });
 
-// 监听消息列表变化，自动滚动到底部
+// 监听消息变化
 watch(
   chatMessages,
   () => {
@@ -208,188 +264,289 @@ watch(
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  max-width: 1000px;
+  max-width: 900px;
   margin: 0 auto;
   width: 100%;
   background-color: var(--neutral-50);
 }
 
-.clear-bar {
-  display: flex;
-  justify-content: flex-end;
-  padding: 0.5rem 0;
-  margin-bottom: -0.5rem;
-}
-
-.clear-button {
-  color: var(--neutral-600);
-  background-color: transparent;
-  border: 1px solid var(--neutral-300);
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.clear-button:hover {
-  color: var(--error-color);
-  border-color: var(--error-color);
-  background-color: #FEF2F2;
-}
-
 .messages-container {
   flex: 1;
   overflow-y: auto;
-  padding: 1.5rem 1rem;
+  padding: 1.5rem;
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
 }
 
+/* 豆包风格空状态 */
 .empty-state {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 100%;
-  text-align: center;
-  padding: 0 1rem;
-  margin-top: -4rem;
+  min-height: 100%;
+  padding: 2rem 1rem;
 }
 
-.welcome-message {
-  margin-bottom: 2.5rem;
-  max-width: 600px;
-}
-
-.welcome-message h2 {
-  color: var(--primary-color);
-  margin-bottom: 1rem;
-  font-size: 1.75rem;
-}
-
-.welcome-message p {
-  font-size: 1.1rem;
-  line-height: 1.6;
-  color: var(--neutral-600);
-}
-
-.examples-container {
+.welcome-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 640px;
   width: 100%;
-  max-width: 700px;
 }
 
-.examples-container h3 {
-  margin-bottom: 1rem;
-  font-weight: 600;
-  color: var(--neutral-700);
-  font-size: 1.1rem;
+.welcome-header {
+  text-align: center;
+  margin-bottom: 3rem;
 }
 
-.example-prompts {
+.welcome-icon {
+  width: 72px;
+  height: 72px;
+  margin: 0 auto 1.5rem;
+}
+
+.welcome-title {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--neutral-800);
+  margin-bottom: 0.75rem;
+  letter-spacing: -0.02em;
+}
+
+.welcome-subtitle {
+  font-size: 1rem;
+  color: var(--neutral-500);
+  line-height: 1.6;
+}
+
+.gradient-text {
+  background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* 功能卡片 */
+.feature-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  grid-template-columns: repeat(2, 1fr);
   gap: 1rem;
+  width: 100%;
+  margin-bottom: 2rem;
 }
 
-.example-prompt {
-  padding: 1rem;
-  background-color: white;
-  border: 1px solid var(--neutral-200);
-  border-radius: var(--radius-lg);
+.feature-card {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.25rem;
+  background: white;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--neutral-100);
   cursor: pointer;
   transition: all 0.2s ease;
-  line-height: 1.5;
-  color: var(--neutral-700);
-  display: flex;
-  align-items: flex-start;
-  gap: 0.75rem;
-  box-shadow: var(--shadow-sm);
 }
 
-.example-prompt .el-icon {
-  color: var(--primary-color);
-  margin-top: 0.125rem;
-}
-
-.example-prompt:hover {
-  background-color: var(--primary-bg);
-  border-color: var(--primary-light);
+.feature-card:hover {
   transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-lg);
+  border-color: var(--primary-light);
 }
 
+.feature-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.feature-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.feature-title {
+  font-weight: 600;
+  color: var(--neutral-800);
+  margin-bottom: 0.25rem;
+}
+
+.feature-desc {
+  font-size: 0.8rem;
+  color: var(--neutral-500);
+}
+
+/* 示例区域 */
+.example-section {
+  width: 100%;
+  text-align: center;
+}
+
+.example-title {
+  font-size: 0.875rem;
+  color: var(--neutral-500);
+  margin-bottom: 1rem;
+}
+
+.example-chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.example-chip {
+  padding: 0.5rem 1rem;
+  background: white;
+  border: 1px solid var(--neutral-200);
+  border-radius: var(--radius-full);
+  font-size: 0.875rem;
+  color: var(--neutral-600);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.example-chip:hover {
+  background: var(--primary-bg);
+  border-color: var(--primary-light);
+  color: var(--primary-color);
+}
+
+/* 聊天头部 */
+.chat-header {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0.5rem 0;
+  margin-bottom: 1rem;
+}
+
+.clear-button {
+  color: var(--neutral-500);
+  background: transparent;
+  border: none;
+}
+
+.clear-button:hover {
+  color: var(--primary-color);
+  background: var(--primary-bg);
+}
+
+/* 消息列表 */
+.messages-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+/* 加载指示器 */
 .loading-container {
   display: flex;
   justify-content: center;
-  margin: 1rem 0;
+  margin: 1.5rem 0;
 }
 
 .loading-indicator {
-  padding: 0.5rem 1rem;
-  background-color: white;
-  border-radius: 2rem;
-  color: var(--primary-color);
-  font-size: 0.875rem;
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  box-shadow: var(--shadow-sm);
+  gap: 0.75rem;
+  padding: 0.75rem 1.25rem;
+  background: white;
+  border-radius: var(--radius-full);
+  box-shadow: var(--shadow-md);
 }
 
-.error-message {
+.loading-dots {
+  display: flex;
+  gap: 4px;
+}
+
+.loading-dots span {
+  width: 8px;
+  height: 8px;
+  background: var(--primary-color);
+  border-radius: 50%;
+  animation: bounce 1.4s infinite ease-in-out both;
+}
+
+.loading-dots span:nth-child(1) {
+  animation-delay: -0.32s;
+}
+
+.loading-dots span:nth-child(2) {
+  animation-delay: -0.16s;
+}
+
+.loading-text {
+  font-size: 0.875rem;
+  color: var(--neutral-600);
+}
+
+@keyframes bounce {
+  0%, 80%, 100% {
+    transform: scale(0);
+  }
+  40% {
+    transform: scale(1);
+  }
+}
+
+/* 错误提示 */
+.error-container {
   margin: 1rem 0;
 }
 
+.error-alert {
+  border-radius: var(--radius-lg);
+}
+
+.error-actions {
+  margin-top: 0.75rem;
+}
+
+/* 输入区域 */
+.input-wrapper {
+  padding: 1rem 1.5rem 1.5rem;
+  background: white;
+  border-top: 1px solid var(--neutral-100);
+}
+
 .input-container {
-  padding: 1rem;
-  background-color: white;
-  border-top: 1px solid var(--neutral-200);
-  box-shadow: 0 -1px 3px rgba(0, 0, 0, 0.05);
+  background: var(--neutral-50);
+  border-radius: var(--radius-xl);
+  padding: 0.5rem;
 }
 
-.prompt-dialog-hint {
-  color: var(--neutral-600);
-  font-size: 0.875rem;
-  margin: 0 0 1rem 0;
+.input-footer {
+  text-align: center;
+  margin-top: 0.75rem;
 }
 
-.candidate-prompts {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  max-height: 360px;
-  overflow-y: auto;
+.footer-hint {
+  font-size: 0.75rem;
+  color: var(--neutral-400);
 }
 
-.candidate-item {
-  padding: 0.75rem 1rem;
-  background-color: var(--neutral-50);
-  border: 1px solid var(--neutral-200);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: background-color 0.2s, border-color 0.2s;
-  font-size: 0.9rem;
-  line-height: 1.5;
-  color: var(--neutral-800);
-}
-
-.candidate-item:hover {
-  background-color: var(--primary-bg);
-  border-color: var(--primary-light);
-}
-
-/* 媒体查询适配不同屏幕尺寸 */
+/* 响应式适配 */
 @media (max-width: 768px) {
-  .chat-container {
-    padding: 0;
+  .messages-container {
+    padding: 1rem;
   }
-  
-  .example-prompts {
+
+  .welcome-title {
+    font-size: 1.5rem;
+  }
+
+  .feature-cards {
     grid-template-columns: 1fr;
   }
-  
-  .messages-container {
-    padding: 1rem 0.75rem;
+
+  .input-wrapper {
+    padding: 0.75rem;
   }
 }
-</style> 
+</style>

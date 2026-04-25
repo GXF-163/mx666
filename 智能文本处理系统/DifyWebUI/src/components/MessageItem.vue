@@ -1,20 +1,21 @@
 <template>
   <div class="message" :class="messageClass">
-    <div class="message-avatar">
-      <el-avatar :icon="avatarIcon" :size="40" :class="message.role"></el-avatar>
+    <!-- AI头像 -->
+    <div v-if="message.role === 'assistant'" class="message-avatar ai-avatar">
+      <div class="avatar-gradient">
+        <el-icon :size="20" color="white"><ChatRound /></el-icon>
+      </div>
     </div>
+
     <div class="message-content">
-      <div class="message-role">{{ roleLabel }}</div>
-      
-      <!-- 思考过程面板 - 可折叠 -->
+      <!-- 思考过程面板 -->
       <div v-if="hasThoughts" class="thought-panel">
         <div class="thought-header" @click="toggleThoughts">
           <el-icon :class="{ 'is-rotate': showThoughts }"><ArrowRight /></el-icon>
           <span>思考过程</span>
         </div>
-        
+
         <div v-show="showThoughts" class="thought-content-panel">
-          <!-- Agent思考过程显示区域 -->
           <div v-if="message.thoughts && message.thoughts.length > 0" class="agent-thoughts">
             <div v-for="thought in sortedThoughts" :key="thought.id" class="thought-item">
               <div v-if="thought.tool" class="thought-tool">
@@ -36,58 +37,90 @@
           </div>
         </div>
       </div>
-      
-      <!-- 文件内容（如图片）显示区域 -->
+
+      <!-- 文件内容显示 -->
       <div v-if="message.files && message.files.length > 0" class="message-files">
         <div v-for="file in message.files" :key="file.id" class="file-item">
           <img v-if="file.type === 'image'" :src="file.url" :alt="file.id" class="image-file" />
-          <div v-else class="file-placeholder">{{ file.type }} 文件</div>
+          <div v-else class="file-card">
+            <el-icon :size="24"><Document /></el-icon>
+            <span class="file-name">{{ file.name || file.id }}</span>
+          </div>
         </div>
       </div>
-      
-      <!-- 消息文本内容 - 最终回答 -->
+
+      <!-- 消息气泡 -->
       <div class="message-bubble" :class="{ 'with-thoughts': hasThoughts }">
-        <div v-if="message.isStreaming" class="message-typing">
-          <span class="dot"></span>
-          <span class="dot"></span>
-          <span class="dot"></span>
+        <!-- 打字动画 -->
+        <div v-if="message.isStreaming && !message.content" class="message-typing">
+          <span class="typing-dot"></span>
+          <span class="typing-dot"></span>
+          <span class="typing-dot"></span>
         </div>
+
+        <!-- 消息内容 -->
         <template v-else-if="message.content">
           <div class="message-text" v-html="safedContent"></div>
-          <!-- 添加语音播放按钮 -->
+
+          <!-- 操作按钮 -->
           <div v-if="message.role === 'assistant'" class="message-actions">
-            <el-button
-              v-if="!isPlaying"
-              type="primary"
-              :icon="Microphone"
-              circle
-              size="small"
-              @click="playAudio"
-              :loading="isLoading"
-            />
-            <el-button
-              v-else
-              type="danger"
-              :icon="VideoPause"
-              circle
-              size="small"
-              @click="stopAudio"
-            />
+            <el-tooltip content="复制内容" placement="top">
+              <el-button
+                type="info"
+                :icon="CopyDocument"
+                circle
+                size="small"
+                text
+                @click="copyContent"
+              />
+            </el-tooltip>
+            <el-tooltip content="语音播放" placement="top">
+              <el-button
+                type="info"
+                :icon="isPlaying ? VideoPause : Headset"
+                circle
+                size="small"
+                text
+                :loading="isLoadingAudio"
+                @click="toggleAudio"
+              />
+            </el-tooltip>
           </div>
         </template>
+
         <template v-else>
           <div class="message-text empty-content">空消息</div>
         </template>
       </div>
-      <div class="message-time">{{ formattedTime }}</div>
+
+      <!-- 时间戳 -->
+      <div class="message-meta">
+        <span class="message-time">{{ formattedTime }}</span>
+      </div>
+    </div>
+
+    <!-- 用户头像 -->
+    <div v-if="message.role === 'user'" class="message-avatar user-avatar">
+      <div class="avatar-plain">
+        <el-icon :size="20" color="white"><UserFilled /></el-icon>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, watch, ref, onUnmounted } from 'vue';
+import { computed, ref, watch, onUnmounted } from 'vue';
 import { ElAvatar, ElIcon, ElButton, ElMessage } from 'element-plus';
-import { UserFilled, ChatRound, ArrowRight, SetUp, Microphone, VideoPause } from '@element-plus/icons-vue';
+import {
+  UserFilled,
+  ChatRound,
+  ArrowRight,
+  SetUp,
+  CopyDocument,
+  Headset,
+  VideoPause,
+  Document
+} from '@element-plus/icons-vue';
 import { Message, AgentThought } from '../types';
 import { marked } from 'marked';
 import { chatApi } from '../api';
@@ -96,43 +129,25 @@ const props = defineProps<{
   message: Message
 }>();
 
-// 是否显示思考过程
 const showThoughts = ref(false);
+const contentChanged = ref(false);
+const isPlaying = ref(false);
+const isLoadingAudio = ref(false);
+const audioPlayer = ref<HTMLAudioElement | null>(null);
 
-// 切换思考过程显示/隐藏
 const toggleThoughts = () => {
   showThoughts.value = !showThoughts.value;
 };
 
-// 是否有思考过程
 const hasThoughts = computed(() => {
   return props.message.thoughts && props.message.thoughts.length > 0;
 });
 
-// 跟踪内容是否有变化
-const contentChanged = ref(false);
-
-// 监听消息内容变化
-watch(
-  () => props.message.content,
-  (newContent, oldContent) => {
-    if (newContent !== oldContent) {
-      contentChanged.value = true;
-      // 3秒后重置动画标志
-      setTimeout(() => {
-        contentChanged.value = false;
-      }, 1000);
-    }
-  }
-);
-
-// 按位置排序的思考过程
 const sortedThoughts = computed(() => {
   if (!props.message.thoughts) return [];
   return [...props.message.thoughts].sort((a, b) => a.position - b.position);
 });
 
-// 格式化工具输入参数
 const formatToolInput = (input: string) => {
   try {
     const parsed = JSON.parse(input);
@@ -142,37 +157,29 @@ const formatToolInput = (input: string) => {
   }
 };
 
-// Computed properties
 const messageClass = computed(() => [
   `message-${props.message.role}`,
   { 'is-streaming': props.message.isStreaming },
   { 'content-changed': contentChanged.value }
 ]);
 
-const avatarIcon = computed(() => {
-  return props.message.role === 'user' ? UserFilled : ChatRound;
-});
-
-const roleLabel = computed(() => {
-  return props.message.role === 'user' ? '您' : 'AI 助手';
-});
-
 // 安全渲染内容
 const safedContent = computed(() => {
   if (!props.message.content) return '';
-  
+
   try {
-    // 尝试使用marked处理Markdown
-    return marked(props.message.content, { breaks: true });
+    // 配置 marked 选项
+    marked.setOptions({
+      breaks: true,
+      gfm: true
+    });
+    return marked(props.message.content);
   } catch (err) {
     console.error('Markdown解析错误:', err);
-    
-    // 如果解析失败，返回简单的HTML转义版本
     return escapeHtml(props.message.content);
   }
 });
 
-// HTML转义函数
 function escapeHtml(html: string): string {
   return html
     .replace(/&/g, "&amp;")
@@ -188,52 +195,60 @@ const formattedTime = computed(() => {
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 });
 
-// 音频播放相关状态
-const isPlaying = ref(false);
-const isLoading = ref(false);
-const audioPlayer = ref<HTMLAudioElement | null>(null);
+// 复制内容
+const copyContent = async () => {
+  if (!props.message.content) return;
+  try {
+    await navigator.clipboard.writeText(props.message.content);
+    ElMessage.success('已复制到剪贴板');
+  } catch (err) {
+    ElMessage.error('复制失败');
+  }
+};
 
-// 播放音频
+// 切换音频播放
+const toggleAudio = async () => {
+  if (isPlaying.value) {
+    stopAudio();
+  } else {
+    await playAudio();
+  }
+};
+
 const playAudio = async () => {
   if (!props.message.content) return;
-  
+
   try {
-    isLoading.value = true;
+    isLoadingAudio.value = true;
     const response = await chatApi.textToAudio({
       text: props.message.content,
       user: 'user-' + Date.now()
     });
 
     if (response.success && response.data.audio) {
-      // 创建音频URL
       const audioUrl = URL.createObjectURL(response.data.audio);
-      
-      // 创建或重用音频播放器
+
       if (!audioPlayer.value) {
         audioPlayer.value = new Audio();
         audioPlayer.value.onended = () => {
           isPlaying.value = false;
         };
       }
-      
+
       audioPlayer.value.src = audioUrl;
       await audioPlayer.value.play();
       isPlaying.value = true;
     } else {
-      console.error('获取音频失败:', response.error);
-      // 添加用户友好的错误提示
-      ElMessage.error('语音功能暂未启用，请联系管理员开启TTS功能');
+      ElMessage.warning('语音功能暂未启用');
     }
   } catch (error) {
     console.error('播放音频时出错:', error);
-    // 添加用户友好的错误提示
-    ElMessage.error('语音功能暂未启用，请联系管理员开启TTS功能');
+    ElMessage.warning('语音功能暂未启用');
   } finally {
-    isLoading.value = false;
+    isLoadingAudio.value = false;
   }
 };
 
-// 停止音频播放
 const stopAudio = () => {
   if (audioPlayer.value) {
     audioPlayer.value.pause();
@@ -242,7 +257,6 @@ const stopAudio = () => {
   }
 };
 
-// 组件卸载时清理
 onUnmounted(() => {
   if (audioPlayer.value) {
     audioPlayer.value.pause();
@@ -254,73 +268,88 @@ onUnmounted(() => {
 <style scoped>
 .message {
   display: flex;
-  margin-bottom: 24px;
-  animation: fade-in 0.3s ease-in-out;
+  margin-bottom: 1.5rem;
+  animation: message-slide-in 0.3s ease-out;
   position: relative;
   width: 100%;
 }
 
+@keyframes message-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 头像样式 */
 .message-avatar {
-  margin-right: 12px;
   flex-shrink: 0;
+  margin-right: 0.75rem;
 }
 
-.message-avatar :deep(.el-avatar) {
-  box-shadow: var(--shadow-sm);
+.avatar-gradient {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.25);
 }
 
-.message-avatar :deep(.user) {
-  background-color: var(--primary-color);
+.avatar-plain {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--neutral-400);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.message-avatar :deep(.assistant) {
-  background-color: var(--secondary-color);
-}
-
+/* 消息内容区 */
 .message-content {
   flex: 1;
-  max-width: calc(100% - 52px);
+  max-width: calc(100% - 60px);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 0.5rem;
 }
 
-.message-role {
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--neutral-600);
-}
-
-/* 思考面板样式 */
+/* 思考过程面板 */
 .thought-panel {
-  margin-bottom: 10px;
+  margin-bottom: 0.5rem;
   border: 1px solid var(--neutral-200);
   border-radius: var(--radius-lg);
   overflow: hidden;
-  background-color: white;
+  background: white;
   box-shadow: var(--shadow-sm);
 }
 
 .thought-header {
-  padding: 8px 12px;
-  background-color: var(--neutral-100);
+  padding: 0.75rem 1rem;
+  background: var(--neutral-50);
   cursor: pointer;
   display: flex;
   align-items: center;
+  gap: 0.5rem;
   font-weight: 500;
   color: var(--neutral-600);
-  transition: background-color 0.2s;
-  font-size: 0.9rem;
+  font-size: 0.875rem;
+  transition: background 0.2s;
 }
 
 .thought-header:hover {
-  background-color: var(--neutral-200);
+  background: var(--neutral-100);
 }
 
 .thought-header .el-icon {
-  margin-right: 6px;
   transition: transform 0.3s;
-  color: var(--neutral-500);
 }
 
 .thought-header .is-rotate {
@@ -328,18 +357,17 @@ onUnmounted(() => {
 }
 
 .thought-content-panel {
-  padding: 12px;
-  background-color: white;
+  padding: 1rem;
+  background: white;
 }
 
-/* Agent思考样式 */
 .agent-thoughts {
-  font-size: 0.9rem;
+  font-size: 0.875rem;
 }
 
 .thought-item {
-  margin-bottom: 16px;
-  padding-bottom: 16px;
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
   border-bottom: 1px dashed var(--neutral-200);
 }
 
@@ -350,72 +378,56 @@ onUnmounted(() => {
 }
 
 .thought-tool {
-  background-color: var(--primary-bg);
+  background: var(--primary-bg);
   border-radius: var(--radius-md);
-  padding: 10px 12px;
-  margin-bottom: 10px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.75rem;
   border-left: 3px solid var(--primary-color);
 }
 
 .tool-name {
   font-weight: 600;
   color: var(--primary-color);
-  margin-bottom: 6px;
   display: flex;
   align-items: center;
-}
-
-.tool-name .el-icon {
-  margin-right: 6px;
+  gap: 0.5rem;
 }
 
 .tool-input {
   font-family: var(--font-mono);
   white-space: pre-wrap;
-  background-color: var(--neutral-100);
-  padding: 10px;
+  background: var(--neutral-100);
+  padding: 0.75rem;
   border-radius: var(--radius-sm);
-  font-size: 0.85rem;
+  font-size: 0.8rem;
+  margin-top: 0.5rem;
   overflow-x: auto;
-  color: var(--neutral-700);
 }
 
 .thought-content {
-  background-color: var(--neutral-100);
+  background: var(--neutral-50);
   border-radius: var(--radius-md);
-  padding: 10px 12px;
-  margin-bottom: 10px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.5rem;
 }
 
 .thought-label, .observation-label {
   font-weight: 600;
   color: var(--neutral-600);
-  margin-bottom: 4px;
-  font-size: 0.85rem;
-}
-
-.thought-text {
-  color: var(--neutral-800);
+  margin-bottom: 0.25rem;
+  font-size: 0.8rem;
 }
 
 .thought-observation {
-  background-color: var(--secondary-light);
+  background: var(--secondary-light);
   border-radius: var(--radius-md);
-  padding: 10px 12px;
+  padding: 0.75rem 1rem;
   border-left: 3px solid var(--secondary-color);
 }
 
-.observation-text {
-  color: var(--neutral-800);
-}
-
-/* 文件显示样式 */
+/* 文件显示 */
 .message-files {
-  margin-bottom: 10px;
-}
-
-.file-item {
-  margin-bottom: 8px;
+  margin-bottom: 0.5rem;
 }
 
 .image-file {
@@ -425,177 +437,202 @@ onUnmounted(() => {
   box-shadow: var(--shadow-md);
 }
 
-.file-placeholder {
-  padding: 10px;
-  background-color: var(--neutral-100);
-  border-radius: var(--radius-md);
+.file-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem;
+  background: white;
+  border: 1px solid var(--neutral-200);
+  border-radius: var(--radius-lg);
   color: var(--neutral-600);
+}
+
+.file-name {
+  font-size: 0.875rem;
 }
 
 /* 消息气泡 */
 .message-bubble {
-  padding: 14px 16px;
-  border-radius: var(--radius-lg);
+  padding: 1rem 1.25rem;
+  border-radius: var(--radius-xl);
   position: relative;
   word-break: break-word;
   box-shadow: var(--shadow-sm);
-  background-color: white;
-  border: 1px solid var(--neutral-200);
+  background: white;
+  border: 1px solid var(--neutral-100);
 }
 
 .message-bubble.with-thoughts {
   border-left: 3px solid var(--primary-color);
 }
 
-.message-time {
-  font-size: 0.75rem;
-  color: var(--neutral-500);
-  margin-left: 2px;
+/* AI消息 - 左侧 */
+.message-assistant .message-bubble {
+  background: white;
+  border-bottom-left-radius: var(--radius-sm);
 }
 
+/* 用户消息 - 右侧 */
+.message-user .message-bubble {
+  background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-light) 100%);
+  color: white;
+  border: none;
+  border-bottom-right-radius: var(--radius-sm);
+}
+
+.message-user .message-content {
+  align-items: flex-end;
+}
+
+.message-user .message-avatar {
+  margin-right: 0;
+  margin-left: 0.75rem;
+  order: 2;
+}
+
+.message-user {
+  flex-direction: row-reverse;
+}
+
+/* 消息文本 */
 .message-text {
-  line-height: 1.6;
-  font-size: 1rem;
-  color: var(--neutral-800);
-}
-
-.empty-content {
-  color: var(--neutral-500);
-  font-style: italic;
+  line-height: 1.7;
+  font-size: 0.95rem;
 }
 
 .message-text :deep(p) {
-  margin: 0 0 12px;
+  margin: 0 0 0.75rem;
 }
 
 .message-text :deep(p:last-child) {
   margin-bottom: 0;
 }
 
-.message-text :deep(a) {
-  color: var(--primary-color);
-  text-decoration: none;
-}
-
 .message-text :deep(pre) {
-  background-color: var(--neutral-100);
+  background: var(--neutral-900);
   border-radius: var(--radius-md);
-  padding: 16px;
+  padding: 1rem;
   overflow-x: auto;
-  margin: 12px 0;
-  border: 1px solid var(--neutral-200);
+  margin: 0.75rem 0;
 }
 
 .message-text :deep(code) {
   font-family: var(--font-mono);
-  background-color: var(--neutral-100);
-  padding: 2px 4px;
+  background: var(--neutral-100);
+  padding: 0.2rem 0.4rem;
   border-radius: var(--radius-sm);
   font-size: 0.9em;
 }
 
+.message-user .message-text :deep(code) {
+  background: rgba(255, 255, 255, 0.2);
+}
+
 .message-text :deep(ul), .message-text :deep(ol) {
-  margin: 8px 0;
-  padding-left: 24px;
+  margin: 0.5rem 0;
+  padding-left: 1.5rem;
 }
 
-/* 当内容更新时添加高亮效果 */
-.content-changed .message-bubble {
-  animation: highlight 1s ease-in-out;
+.message-text :deep(li) {
+  margin: 0.25rem 0;
 }
 
-@keyframes highlight {
-  0%, 100% {
-    background-color: white;
-  }
-  50% {
-    background-color: var(--primary-bg);
-  }
+.message-text :deep(blockquote) {
+  border-left: 3px solid var(--primary-color);
+  padding-left: 1rem;
+  margin: 0.75rem 0;
+  color: var(--neutral-600);
 }
 
-/* User message */
-.message-user {
-  flex-direction: row-reverse;
+/* 操作按钮 */
+.message-actions {
+  margin-top: 0.75rem;
+  display: flex;
+  gap: 0.5rem;
+  opacity: 0;
+  transition: opacity 0.2s;
 }
 
-.message-user .message-avatar {
-  margin-right: 0;
-  margin-left: 12px;
+.message:hover .message-actions {
+  opacity: 1;
 }
 
-.message-user .message-role {
-  text-align: right;
+/* 元信息 */
+.message-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
-.message-user .message-bubble {
-  background-color: var(--primary-bg);
-  border: 1px solid var(--primary-light);
-  color: var(--neutral-800);
+.message-time {
+  font-size: 0.75rem;
+  color: var(--neutral-400);
 }
 
 .message-user .message-time {
   text-align: right;
 }
 
-/* Typing animation */
+/* 打字动画 */
 .message-typing {
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 4px;
   min-height: 24px;
 }
 
-.dot {
-  display: inline-block;
+.typing-dot {
   width: 8px;
   height: 8px;
+  background: var(--primary-light);
   border-radius: 50%;
-  background-color: var(--primary-light);
-  margin: 0 3px;
-  animation: typing 1.2s infinite ease-in-out;
+  animation: typing-bounce 1.4s infinite ease-in-out both;
 }
 
-.dot:nth-child(2) {
-  animation-delay: 0.2s;
+.typing-dot:nth-child(1) {
+  animation-delay: -0.32s;
 }
 
-.dot:nth-child(3) {
-  animation-delay: 0.4s;
+.typing-dot:nth-child(2) {
+  animation-delay: -0.16s;
 }
 
-@keyframes typing {
-  0%, 60%, 100% {
-    transform: translateY(0);
-    opacity: 0.6;
+@keyframes typing-bounce {
+  0%, 80%, 100% {
+    transform: scale(0);
   }
-  30% {
-    transform: translateY(-4px);
+  40% {
+    transform: scale(1);
+  }
+}
+
+/* 内容更新高亮 */
+.content-changed .message-bubble {
+  animation: highlight-pulse 1s ease-in-out;
+}
+
+@keyframes highlight-pulse {
+  0%, 100% {
+    box-shadow: var(--shadow-sm);
+  }
+  50% {
+    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.2);
+  }
+}
+
+/* 响应式 */
+@media (max-width: 768px) {
+  .message-content {
+    max-width: calc(100% - 50px);
+  }
+
+  .message-bubble {
+    padding: 0.875rem 1rem;
+  }
+
+  .message-actions {
     opacity: 1;
   }
 }
-
-@keyframes fade-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.message-actions {
-  margin-top: 8px;
-  display: flex;
-  gap: 8px;
-}
-
-.message-actions .el-button {
-  padding: 6px;
-}
-
-.message-actions .el-button :deep(.el-icon) {
-  font-size: 16px;
-}
-</style> 
+</style>

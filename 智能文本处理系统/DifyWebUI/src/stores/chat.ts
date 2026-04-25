@@ -1,10 +1,45 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import type { Message, WorkflowFile } from '../types';
+import type { Message } from '../types';
 import { v4 as uuidv4 } from 'uuid';
-
-// 导入实际的 chatApi 对象
 import { chatApi } from '../api';
+import { ElMessage } from 'element-plus';
+
+// 文件内容缓存
+const fileContentCache = new Map<string, string>();
+
+// 读取文件内容
+const readFileContent = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    // 检查是否是文本文件
+    const isTextFile = file.type.startsWith('text/') ||
+      file.name.endsWith('.txt') ||
+      file.name.endsWith('.md') ||
+      file.name.endsWith('.json') ||
+      file.name.endsWith('.js') ||
+      file.name.endsWith('.ts') ||
+      file.name.endsWith('.py') ||
+      file.name.endsWith('.html') ||
+      file.name.endsWith('.css') ||
+      file.name.endsWith('.vue') ||
+      file.name.endsWith('.csv');
+
+    if (!isTextFile) {
+      resolve(`[文件: ${file.name}, 类型: ${file.type || '未知'}, 大小: ${(file.size / 1024).toFixed(2)} KB]`);
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const content = e.target?.result as string;
+      resolve(content);
+    };
+    reader.onerror = (e) => {
+      reject(new Error('读取文件失败'));
+    };
+    reader.readAsText(file);
+  });
+};
 
 export const useChatStore = defineStore('chat', () => {
   // 状态
@@ -15,28 +50,28 @@ export const useChatStore = defineStore('chat', () => {
 
   // 计算属性
   const lastMessage = computed(() => {
-    return messages.value.length > 0 
-      ? messages.value[messages.value.length - 1] 
+    return messages.value.length > 0
+      ? messages.value[messages.value.length - 1]
       : null;
   });
 
-  // 动作
+  // 发送消息（支持流式响应）
   const sendMessage = async (content: string, files: File[] = []) => {
     // 如果没有内容和文件，直接返回
     if (!content.trim() && files.length === 0) return;
-    
+
     // 清除错误
     error.value = null;
-    
+
     // 构建用户消息内容
     let userContent = content.trim();
     if (files.length > 0) {
       const fileNames = files.map(f => f.name).join(', ');
-      userContent = userContent 
+      userContent = userContent
         ? `${userContent}\n[已上传文件: ${fileNames}]`
         : `[已上传文件: ${fileNames}]`;
     }
-    
+
     // 创建并添加用户消息
     const userMessage: Message = {
       id: uuidv4(),
@@ -44,9 +79,9 @@ export const useChatStore = defineStore('chat', () => {
       content: userContent,
       timestamp: new Date().toISOString()
     };
-    
+
     messages.value.push(userMessage);
-    
+
     // 创建并添加助手空消息
     const assistantMessageId = uuidv4();
     const assistantMessage: Message = {
@@ -55,63 +90,77 @@ export const useChatStore = defineStore('chat', () => {
       content: '',
       timestamp: new Date().toISOString(),
       thoughts: [],
-      files: []
+      files: [],
+      isStreaming: true
     };
-    
+
     messages.value.push(assistantMessage);
-    
+
     try {
       isLoading.value = true;
       streamingMessageId.value = assistantMessageId;
-      
-      // 有提示词或文件时统一走工作流（提示词、文件均为可选）
-      let uploadedFiles: WorkflowFile[] = [];
+
+      // 读取所有文件内容
+      let filesContent = '';
       if (files.length > 0) {
-        console.log('📤 开始上传文件...');
+        console.log('📁 读取文件内容...');
         for (const file of files) {
-          const uploadResult = await chatApi.uploadFile(file);
-          if (uploadResult.success && uploadResult.data) {
-            uploadedFiles.push({
-              dify_model_identity: '__dify__file__',
-              upload_file_id: uploadResult.data.id,
-              type: 'document',
-              transfer_method: 'local_file'
-            });
-            console.log(`✅ 文件 ${file.name} 上传成功，ID: ${uploadResult.data.id}`);
-          } else {
-            throw new Error(`文件 ${file.name} 上传失败: ${uploadResult.error || '未知错误'}`);
+          try {
+            const content = await readFileContent(file);
+            filesContent += `\n\n=== 文件: ${file.name} ===\n${content}`;
+          } catch (e) {
+            console.error(`读取文件 ${file.name} 失败:`, e);
           }
         }
       }
-      
-      // 构建工作流输入参数：只传有值的项（可仅提示词、仅文件、或两者都有）
-      const workflowInputs: Record<string, any> = {};
-      if (uploadedFiles.length > 0) workflowInputs.Input_files = uploadedFiles;
-      if (content.trim()) workflowInputs.personalized_prompts = content.trim();
-      
-      console.log('🚀 调用工作流...', workflowInputs);
-      const workflowResult = await chatApi.runWorkflow(workflowInputs, 300);
-      
-      if (workflowResult.success && workflowResult.data) {
-        const result = workflowResult.data;
-        const answer = result?.data?.outputs?.text || result?.answer || JSON.stringify(result, null, 2);
-        const index = messages.value.findIndex(m => m.id === assistantMessageId);
-        if (index !== -1) {
-          messages.value[index].content = answer;
-        }
-        console.log('✅ 工作流执行成功！', answer);
-      } else {
-        throw new Error(workflowResult.error || '工作流执行失败');
+
+      // 构建完整提示词
+      let fullPrompt = content.trim();
+      if (filesContent) {
+        fullPrompt += `\n\n${filesContent}`;
       }
-      
+
+      console.log('🚀 发送消息到 Ollama...');
+
+      // 调用 Ollama 流式 API
+      await chatApi.sendOllamaStreamMessage(
+        fullPrompt,
+        {
+          onMessage: (text: string) => {
+            // 更新助手消息内容
+            const index = messages.value.findIndex(m => m.id === assistantMessageId);
+            if (index !== -1) {
+              messages.value[index].content = text;
+            }
+          },
+          onComplete: () => {
+            console.log('✅ 流式响应完成');
+            const index = messages.value.findIndex(m => m.id === assistantMessageId);
+            if (index !== -1) {
+              messages.value[index].isStreaming = false;
+            }
+          },
+          onError: (err: string) => {
+            console.error('❌ 流式响应错误:', err);
+            error.value = err;
+            const index = messages.value.findIndex(m => m.id === assistantMessageId);
+            if (index !== -1) {
+              messages.value[index].content = `❌ 错误: ${err}`;
+              messages.value[index].isStreaming = false;
+            }
+          }
+        }
+      );
+
     } catch (e) {
       error.value = e instanceof Error ? e.message : '发送消息失败';
       console.error('Error sending message:', e);
-      
+
       // 更新助手消息显示错误
       const index = messages.value.findIndex(m => m.id === assistantMessageId);
       if (index !== -1) {
         messages.value[index].content = `❌ 错误: ${error.value}`;
+        messages.value[index].isStreaming = false;
       }
     } finally {
       isLoading.value = false;
@@ -122,10 +171,34 @@ export const useChatStore = defineStore('chat', () => {
   const clearMessages = () => {
     messages.value = [];
     error.value = null;
+    ElMessage.success('已开启新对话');
   };
 
   const removeMessage = (id: string) => {
     messages.value = messages.value.filter(m => m.id !== id);
+  };
+
+  const retryLastMessage = async () => {
+    if (messages.value.length < 2) return;
+
+    // 找到最后一条用户消息
+    let lastUserMessageIndex = -1;
+    for (let i = messages.value.length - 1; i >= 0; i--) {
+      if (messages.value[i].role === 'user') {
+        lastUserMessageIndex = i;
+        break;
+      }
+    }
+
+    if (lastUserMessageIndex === -1) return;
+
+    const lastUserMessage = messages.value[lastUserMessageIndex];
+
+    // 删除助手回复（如果有）
+    messages.value = messages.value.slice(0, lastUserMessageIndex + 1);
+
+    // 重新发送
+    await sendMessage(lastUserMessage.content, []);
   };
 
   return {
@@ -134,13 +207,14 @@ export const useChatStore = defineStore('chat', () => {
     isLoading,
     error,
     streamingMessageId,
-    
+
     // 计算属性
     lastMessage,
-    
+
     // 动作
     sendMessage,
     clearMessages,
-    removeMessage
+    removeMessage,
+    retryLastMessage
   };
-}); 
+});

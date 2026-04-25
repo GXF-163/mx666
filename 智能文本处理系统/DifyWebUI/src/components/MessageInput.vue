@@ -2,47 +2,73 @@
   <div class="message-input">
     <!-- 已选择的文件列表 -->
     <div v-if="selectedFiles.length > 0" class="file-list">
-      <div v-for="(file, index) in selectedFiles" :key="index" class="file-item">
+      <div v-for="(file, index) in selectedFiles" :key="index" class="file-tag">
         <el-icon class="file-icon"><Document /></el-icon>
         <span class="file-name">{{ file.name }}</span>
-        <span class="file-size">({{ formatFileSize(file.size) }})</span>
+        <span class="file-size" v-if="file.size">({{ formatFileSize(file.size) }})</span>
         <el-button
-          type="danger"
+          type="info"
           :icon="Close"
           circle
           size="small"
+          text
           @click="removeFile(index)"
           class="remove-file-btn"
         />
       </div>
     </div>
-    
-    <div class="input-wrapper">
-      <!-- 选择文件（从文本整编列表） -->
-      <el-button
-        :icon="Paperclip"
-        circle
-        @click="openFileListDialog"
-        :disabled="disabled"
-        class="file-button"
-        size="large"
+
+    <div class="input-area">
+      <!-- 文件选择按钮 -->
+      <el-dropdown trigger="click" @command="handleFileAction">
+        <el-button
+          :icon="Paperclip"
+          circle
+          :disabled="disabled"
+          class="attach-button"
+          size="large"
+          text
+        />
+        <template #dropdown>
+          <el-dropdown-menu>
+            <el-dropdown-item command="local">
+              <el-icon><FolderOpened /></el-icon>
+              <span>从电脑选择</span>
+            </el-dropdown-item>
+            <el-dropdown-item command="manifest">
+              <el-icon><Collection /></el-icon>
+              <span>从文件列表</span>
+            </el-dropdown-item>
+          </el-dropdown-menu>
+        </template>
+      </el-dropdown>
+
+      <!-- 隐藏的文件输入 -->
+      <input
+        ref="fileInputRef"
+        type="file"
+        multiple
+        style="display: none"
+        @change="handleFileSelected"
+        accept=".txt,.md,.pdf,.doc,.docx,.xls,.xlsx,.csv,.json,.py,.js,.html,.css,.vue,.ts"
       />
-      
+
       <!-- 输入框 -->
-      <el-input
-        v-model="inputText"
-        :placeholder="placeholder"
-        :disabled="disabled"
-        clearable
-        type="textarea"
-        resize="none"
-        :rows="1"
-        autosize
-        @keydown.enter.prevent="handleEnter"
-        ref="inputRef"
-        class="custom-input"
-      />
-      
+      <div class="input-wrapper">
+        <el-input
+          v-model="inputText"
+          :placeholder="placeholder"
+          :disabled="disabled"
+          type="textarea"
+          resize="none"
+          :rows="1"
+          autosize
+          @keydown.enter.prevent="handleEnter"
+          ref="inputRef"
+          class="chat-input"
+        />
+      </div>
+
       <!-- 发送按钮 -->
       <el-button
         type="primary"
@@ -51,17 +77,18 @@
         @click="handleSend"
         class="send-button"
         size="large"
+        :circle="!inputText.trim()"
       >
-        <el-icon><Position /></el-icon>
-        <span>发送</span>
+        <el-icon v-if="!disabled"><Position /></el-icon>
+        <span v-else>发送</span>
       </el-button>
-      
-    </div>
-    <div class="input-hint">
-      按回车键发送，按Shift+回车键换行
     </div>
 
-    <!-- 从文本整编管理选择文件 -->
+    <div class="input-hint">
+      <span>按 Enter 发送，Shift + Enter 换行</span>
+    </div>
+
+    <!-- 文件选择弹窗 -->
     <el-dialog
       v-model="fileListDialogVisible"
       title="选择文件"
@@ -92,9 +119,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, nextTick } from 'vue';
-import { ElInput, ElButton, ElIcon, ElMessage } from 'element-plus';
-import { Position, Paperclip, Document, Close } from '@element-plus/icons-vue';
+import { ref, computed, onMounted, nextTick } from 'vue';
+import { ElInput, ElButton, ElIcon, ElMessage, ElDropdown } from 'element-plus';
+import { Position, Paperclip, Document, Close, FolderOpened, Collection } from '@element-plus/icons-vue';
 
 interface FileListItem {
   name: string;
@@ -112,6 +139,7 @@ const emit = defineEmits<{
 
 const inputText = ref('');
 const inputRef = ref<InstanceType<typeof ElInput> | null>(null);
+const fileInputRef = ref<HTMLInputElement | null>(null);
 const selectedFiles = ref<File[]>([]);
 
 const fileListDialogVisible = ref(false);
@@ -121,7 +149,7 @@ const fileListTableRef = ref<any>(null);
 const selectedRows = ref<FileListItem[]>([]);
 
 const placeholder = computed(() => {
-  return props.disabled ? '等待响应中...' : '输入您的问题或提示词...';
+  return props.disabled ? '等待响应中...' : '输入问题或上传文件...';
 });
 
 const canSend = computed(() => {
@@ -133,17 +161,33 @@ const formatFileSize = (bytes: number): string => {
   const k = 1024;
   const sizes = ['B', 'KB', 'MB', 'GB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 };
 
-watch(fileListDialogVisible, (visible) => {
-  if (visible) {
-    loadFileListManifest();
-    selectedRows.value = [];
+// 处理文件操作选择
+const handleFileAction = (command: string) => {
+  if (command === 'local') {
+    // 打开本地文件选择
+    fileInputRef.value?.click();
+  } else if (command === 'manifest') {
+    // 打开文件列表弹窗
+    fileListDialogVisible.value = true;
   }
-});
+};
 
-function loadFileListManifest() {
+// 处理本地文件选择
+const handleFileSelected = (event: Event) => {
+  const input = event.target as HTMLInputElement;
+  if (input.files && input.files.length > 0) {
+    const files = Array.from(input.files);
+    selectedFiles.value.push(...files);
+    ElMessage.success(`已选择 ${files.length} 个文件`);
+  }
+  // 清空 input 值，允许重复选择相同文件
+  input.value = '';
+};
+
+const loadFileListManifest = () => {
   fileListLoading.value = true;
   fetch('/file_list/manifest.json')
     .then(r => r.json())
@@ -157,17 +201,13 @@ function loadFileListManifest() {
     .finally(() => {
       fileListLoading.value = false;
     });
-}
+};
 
-function onFileSelectionChange(rows: FileListItem[]) {
+const onFileSelectionChange = (rows: FileListItem[]) => {
   selectedRows.value = rows;
-}
+};
 
-function openFileListDialog() {
-  fileListDialogVisible.value = true;
-}
-
-async function confirmSelectFiles() {
+const confirmSelectFiles = async () => {
   if (selectedRows.value.length === 0) return;
   const files: File[] = [];
   for (const row of selectedRows.value) {
@@ -182,7 +222,7 @@ async function confirmSelectFiles() {
   selectedFiles.value.push(...files);
   fileListDialogVisible.value = false;
   nextTick(() => fileListTableRef.value?.clearSelection());
-}
+};
 
 const removeFile = (index: number) => {
   selectedFiles.value.splice(index, 1);
@@ -203,7 +243,7 @@ const handleSend = () => {
     });
     inputText.value = '';
     selectedFiles.value = [];
-    
+
     // Focus the input after sending
     setTimeout(() => {
       if (inputRef.value && inputRef.value.$el) {
@@ -224,6 +264,16 @@ onMounted(() => {
 /** 供父组件调用：将提示词填入输入框 */
 function setPrompt(text: string) {
   inputText.value = text;
+  // Focus input after setting prompt
+  setTimeout(() => {
+    if (inputRef.value && inputRef.value.$el) {
+      const textarea = inputRef.value.$el.querySelector('textarea');
+      if (textarea) {
+        textarea.focus();
+        textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+      }
+    }
+  }, 10);
 }
 
 defineExpose({
@@ -234,107 +284,36 @@ defineExpose({
 <style scoped>
 .message-input {
   width: 100%;
-  position: relative;
 }
 
-.custom-input {
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-}
-
-:deep(.el-input__wrapper) {
-  border-radius: var(--radius-lg);
-  padding-right: 0;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-  border: 1px solid var(--neutral-200);
-  transition: border-color 0.2s, box-shadow 0.2s;
-  background-color: white;
-}
-
-:deep(.el-input__wrapper:hover),
-:deep(.el-input__wrapper:focus-within) {
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
-  border-color: var(--primary-color);
-}
-
-:deep(.el-textarea__inner) {
-  resize: none;
-  padding: 12px 16px;
-  min-height: 24px !important;
-  max-height: 150px !important;
-  line-height: 1.5;
-  font-size: 1rem;
-  color: var(--neutral-800);
-}
-
-
-.input-hint {
-  color: var(--neutral-500);
-  font-size: 0.7rem;
-  margin-top: 6px;
-  text-align: right;
-  padding-right: 8px;
-}
-
-.send-button {
-  border: none;
-  background-color: var(--primary-color);
-  color: white;
-  height: auto;
-  padding: 0 16px;
-  font-size: 0.9rem;
-  border-radius: var(--radius-lg);
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.send-button:hover {
-  background-color: var(--primary-dark);
-  color: white;
-}
-
-.send-button:disabled {
-  background-color: var(--primary-light);
-  color: white;
-}
-
-.send-button .el-icon {
-  font-size: 1rem;
-}
-
-.file-list-dialog .dialog-hint {
-  color: var(--neutral-600);
-  font-size: 0.875rem;
-  margin: 0 0 0.75rem 0;
-}
-
+/* 文件标签列表 */
 .file-list {
-  margin-bottom: 8px;
   display: flex;
-  flex-direction: column;
-  gap: 6px;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  padding: 0 0.5rem;
 }
 
-.file-item {
+.file-tag {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  background-color: var(--neutral-50);
-  border: 1px solid var(--neutral-200);
-  border-radius: var(--radius-md);
+  gap: 0.5rem;
+  padding: 0.375rem 0.75rem;
+  background: var(--primary-bg);
+  border: 1px solid var(--primary-light);
+  border-radius: var(--radius-full);
   font-size: 0.875rem;
 }
 
 .file-icon {
   color: var(--primary-color);
-  font-size: 1rem;
+  font-size: 0.875rem;
 }
 
 .file-name {
-  flex: 1;
   color: var(--neutral-700);
+  max-width: 200px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -342,53 +321,116 @@ defineExpose({
 
 .file-size {
   color: var(--neutral-500);
-  font-size: 0.8rem;
+  font-size: 0.75rem;
 }
 
 .remove-file-btn {
-  margin-left: auto;
+  margin-left: 0.25rem;
 }
 
-/* 使用 grid 固定三列：左按钮 | 输入框 | 发送按钮，保证发送按钮始终可见 */
-.input-wrapper {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  align-items: flex-end;
-  gap: 8px;
-  min-height: 48px;
-  width: 100%;
-  box-sizing: border-box;
-}
-
-.file-button {
-  grid-column: 1;
-  color: var(--neutral-600);
-  border-color: var(--neutral-300);
-}
-
-.file-button:hover {
-  color: var(--primary-color);
-  border-color: var(--primary-color);
-}
-
-.custom-input {
-  grid-column: 2;
-  min-width: 0;
-  width: 100%;
-}
-
-:deep(.custom-input .el-textarea__wrapper),
-:deep(.custom-input .el-input__wrapper) {
-  min-width: 0;
-}
-
-.send-button {
-  grid-column: 3;
-  height: auto;
-  padding: 12px 20px;
-  white-space: nowrap;
+/* 输入区域 */
+.input-area {
   display: flex;
-  align-items: center;
-  gap: 4px;
+  align-items: flex-end;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  background: white;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--neutral-200);
+  box-shadow: var(--shadow-sm);
+  transition: all 0.2s ease;
 }
-</style> 
+
+.input-area:focus-within {
+  border-color: var(--primary-light);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+}
+
+/* 附件按钮 */
+.attach-button {
+  color: var(--neutral-400);
+  flex-shrink: 0;
+}
+
+.attach-button:hover {
+  color: var(--primary-color);
+  background: var(--primary-bg);
+}
+
+/* 输入框包装 */
+.input-wrapper {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 输入框 */
+.chat-input :deep(.el-textarea__inner) {
+  resize: none;
+  border: none;
+  padding: 0.625rem 0;
+  min-height: 24px !important;
+  max-height: 200px !important;
+  line-height: 1.6;
+  font-size: 1rem;
+  color: var(--neutral-800);
+  background: transparent;
+  box-shadow: none;
+}
+
+.chat-input :deep(.el-textarea__inner:focus) {
+  box-shadow: none;
+}
+
+.chat-input :deep(.el-textarea__inner::placeholder) {
+  color: var(--neutral-400);
+}
+
+/* 发送按钮 */
+.send-button {
+  flex-shrink: 0;
+  background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-light) 100%);
+  border: none;
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+  transition: all 0.2s ease;
+}
+
+.send-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(79, 70, 229, 0.4);
+}
+
+.send-button:disabled {
+  background: var(--neutral-300);
+  box-shadow: none;
+}
+
+.send-button .el-icon {
+  font-size: 1.125rem;
+}
+
+/* 输入提示 */
+.input-hint {
+  text-align: center;
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--neutral-400);
+}
+
+/* 文件选择弹窗 */
+.file-list-dialog .dialog-hint {
+  color: var(--neutral-600);
+  font-size: 0.875rem;
+  margin: 0 0 0.75rem 0;
+}
+
+/* 响应式 */
+@media (max-width: 768px) {
+  .input-area {
+    padding: 0.375rem;
+  }
+
+  .file-name {
+    max-width: 120px;
+  }
+}
+</style>

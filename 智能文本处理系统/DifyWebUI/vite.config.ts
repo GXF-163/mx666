@@ -14,6 +14,12 @@ export default defineConfig({
     port: 3000,
     host: '0.0.0.0',
     proxy: {
+      // Ollama API 代理 - 解决跨域问题
+      '/ollama': {
+        target: 'http://localhost:11434',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/ollama/, ''),
+      },
       '/local-api': {
         target: 'http://localhost:5174',
         changeOrigin: true,
