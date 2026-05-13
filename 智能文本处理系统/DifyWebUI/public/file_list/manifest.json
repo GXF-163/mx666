@@ -1,0 +1,45 @@
+{
+  "basePath": "file_list",
+  "files": [
+    {
+      "name": "test_1.txt",
+      "category": "Test",
+      "path": "file_list/Test/test_1.txt"
+    },
+    {
+      "name": "test_2.txt",
+      "category": "Test",
+      "path": "file_list/Test/test_2.txt"
+    },
+    {
+      "name": "test_3.txt",
+      "category": "Test",
+      "path": "file_list/Test/test_3.txt"
+    },
+    {
+      "name": "test2_1.txt",
+      "category": "Test2",
+      "path": "file_list/Test2/test2_1.txt"
+    },
+    {
+      "name": "test2_2.txt",
+      "category": "Test2",
+      "path": "file_list/Test2/test2_2.txt"
+    },
+    {
+      "name": "test2_3.txt",
+      "category": "Test2",
+      "path": "file_list/Test2/test2_3.txt"
+    },
+    {
+      "name": "test2_4.txt",
+      "category": "Test2",
+      "path": "file_list/Test2/test2_4.txt"
+    },
+    {
+      "name": "111.txt",
+      "category": "Test4",
+      "path": "file_list/Test4/111.txt"
+    }
+  ]
+}

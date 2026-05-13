@@ -1,0 +1,2258 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智能文档关键信息提取助手</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/element-plus@2.4.4/dist/index.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary-color: #409EFF;
+            --primary-light: #79bbff;
+            --primary-dark: #337ecc;
+            --success-color: #67c23a;
+            --warning-color: #e6a23c;
+            --danger-color: #f56c6c;
+            --info-color: #909399;
+            --bg-color: #f5f7fa;
+            --card-bg: #ffffff;
+            --text-primary: #303133;
+            --text-regular: #606266;
+            --text-secondary: #909399;
+            --border-color: #dcdfe6;
+            --shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-color);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+
+        .app-container {
+            display: flex;
+            min-height: 100vh;
+        }
+
+        /* 左侧导航 */
+        .sidebar {
+            width: 240px;
+            background: var(--card-bg);
+            box-shadow: var(--shadow);
+            display: flex;
+            flex-direction: column;
+            position: fixed;
+            height: 100vh;
+            z-index: 100;
+        }
+
+        .logo {
+            padding: 24px 20px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo-icon {
+            width: 42px;
+            height: 42px;
+            background: linear-gradient(135deg, var(--primary-color), var(--primary-light));
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 20px;
+        }
+
+        .logo-text {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--text-primary);
+            line-height: 1.3;
+        }
+
+        .nav-menu {
+            flex: 1;
+            padding: 16px 0;
+            overflow-y: auto;
+        }
+
+        .nav-item {
+            padding: 14px 24px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            color: var(--text-regular);
+            transition: all 0.3s;
+            border-left: 3px solid transparent;
+        }
+
+        .nav-item:hover {
+            background: var(--bg-color);
+            color: var(--primary-color);
+        }
+
+        .nav-item.active {
+            background: linear-gradient(90deg, rgba(64, 158, 255, 0.1), transparent);
+            color: var(--primary-color);
+            border-left-color: var(--primary-color);
+        }
+
+        .nav-item i {
+            width: 20px;
+            text-align: center;
+        }
+
+        .nav-item span {
+            font-size: 14px;
+        }
+
+        /* 右侧内容区 */
+        .main-content {
+            flex: 1;
+            margin-left: 240px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* 顶部导航 */
+        .topbar {
+            height: 60px;
+            background: var(--card-bg);
+            box-shadow: var(--shadow);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+            position: sticky;
+            top: 0;
+            z-index: 50;
+        }
+
+        .topbar-left {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .breadcrumb {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        .breadcrumb span {
+            color: var(--text-primary);
+            font-weight: 500;
+        }
+
+        .topbar-right {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .model-selector {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: var(--bg-color);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .model-selector:hover {
+            background: #ecf5ff;
+        }
+
+        .model-status {
+            width: 8px;
+            height: 8px;
+            background: var(--success-color);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .icon-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            color: var(--text-regular);
+            background: transparent;
+            border: none;
+        }
+
+        .icon-btn:hover {
+            background: var(--bg-color);
+            color: var(--primary-color);
+        }
+
+        /* 页面内容 */
+        .page-content {
+            flex: 1;
+            padding: 24px;
+        }
+
+        .page-header {
+            margin-bottom: 24px;
+        }
+
+        .page-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+        }
+
+        .page-desc {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        /* 卡片 */
+        .card {
+            background: var(--card-bg);
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+            padding: 24px;
+            margin-bottom: 24px;
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+
+        .card-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        /* 上传区域 */
+        .upload-area {
+            border: 2px dashed var(--border-color);
+            border-radius: 12px;
+            padding: 48px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            background: var(--bg-color);
+        }
+
+        .upload-area:hover {
+            border-color: var(--primary-color);
+            background: #ecf5ff;
+        }
+
+        .upload-area.dragover {
+            border-color: var(--primary-color);
+            background: #ecf5ff;
+            transform: scale(1.01);
+        }
+
+        .upload-icon {
+            font-size: 48px;
+            color: var(--primary-color);
+            margin-bottom: 16px;
+        }
+
+        .upload-text {
+            font-size: 16px;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+        }
+
+        .upload-hint {
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .file-types {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            margin-top: 20px;
+        }
+
+        .file-type-badge {
+            padding: 6px 12px;
+            background: white;
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        /* 文件列表 */
+        .file-list {
+            margin-top: 20px;
+        }
+
+        .file-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px;
+            background: var(--bg-color);
+            border-radius: 8px;
+            margin-bottom: 12px;
+            transition: all 0.3s;
+        }
+
+        .file-item:hover {
+            background: #ecf5ff;
+        }
+
+        .file-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .file-icon {
+            width: 40px;
+            height: 40px;
+            background: white;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--primary-color);
+            font-size: 18px;
+        }
+
+        .file-name {
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+
+        .file-size {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .file-status {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .status-badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+        }
+
+        .status-badge.pending {
+            background: #fdf6ec;
+            color: var(--warning-color);
+        }
+
+        .status-badge.processing {
+            background: #ecf5ff;
+            color: var(--primary-color);
+        }
+
+        .status-badge.success {
+            background: #f0f9ff;
+            color: var(--success-color);
+        }
+
+        .status-badge.error {
+            background: #fef0f0;
+            color: var(--danger-color);
+        }
+
+        /* 进度条 */
+        .progress-bar {
+            width: 120px;
+            height: 4px;
+            background: var(--border-color);
+            border-radius: 2px;
+            overflow: hidden;
+        }
+
+        .progress-inner {
+            height: 100%;
+            background: var(--primary-color);
+            border-radius: 2px;
+            transition: width 0.3s;
+        }
+
+        /* 按钮 */
+        .btn {
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s;
+            border: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: var(--primary-color);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--primary-dark);
+        }
+
+        .btn-success {
+            background: var(--success-color);
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #5daf34;
+        }
+
+        .btn-outline {
+            background: white;
+            border: 1px solid var(--border-color);
+            color: var(--text-regular);
+        }
+
+        .btn-outline:hover {
+            border-color: var(--primary-color);
+            color: var(--primary-color);
+        }
+
+        .btn-danger {
+            background: var(--danger-color);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #f78989;
+        }
+
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+
+        /* 任务队列 */
+        .task-queue {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 16px;
+        }
+
+        .task-card {
+            background: var(--bg-color);
+            border-radius: 12px;
+            padding: 20px;
+            transition: all 0.3s;
+        }
+
+        .task-card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow);
+        }
+
+        .task-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+
+        .task-name {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .task-time {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .task-info {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .task-info-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .task-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        /* 结果展示 */
+        .result-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+        }
+
+        .result-panel {
+            background: var(--bg-color);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .result-panel-header {
+            padding: 16px 20px;
+            background: white;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .result-panel-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .result-panel-content {
+            padding: 20px;
+            height: 400px;
+            overflow-y: auto;
+            font-size: 13px;
+            line-height: 1.8;
+            white-space: pre-wrap;
+            font-family: 'Consolas', monospace;
+        }
+
+        /* 历史记录 */
+        .history-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .history-item {
+            display: flex;
+            align-items: center;
+            padding: 20px;
+            background: var(--bg-color);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .history-item:hover {
+            background: #ecf5ff;
+        }
+
+        .history-icon {
+            width: 48px;
+            height: 48px;
+            background: white;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 16px;
+            color: var(--primary-color);
+            font-size: 20px;
+        }
+
+        .history-content {
+            flex: 1;
+        }
+
+        .history-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 4px;
+        }
+
+        .history-meta {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .history-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        /* 模型管理 */
+        .model-list {
+            display: grid;
+            gap: 16px;
+        }
+
+        .model-card {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 20px;
+            background: var(--bg-color);
+            border-radius: 12px;
+            transition: all 0.3s;
+        }
+
+        .model-card:hover {
+            background: #ecf5ff;
+        }
+
+        .model-card.active {
+            background: linear-gradient(135deg, rgba(64, 158, 255, 0.1), rgba(64, 158, 255, 0.05));
+            border: 1px solid var(--primary-color);
+        }
+
+        .model-info {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .model-icon {
+            width: 48px;
+            height: 48px;
+            background: white;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--primary-color);
+        }
+
+        .model-name {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .model-desc {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .model-stats {
+            display: flex;
+            gap: 24px;
+        }
+
+        .stat-item {
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        /* 提示词管理 */
+        .prompt-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 16px;
+        }
+
+        .prompt-card {
+            padding: 20px;
+            background: var(--bg-color);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .prompt-card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow);
+        }
+
+        .prompt-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+        }
+
+        .prompt-preview {
+            font-size: 12px;
+            color: var(--text-secondary);
+            line-height: 1.6;
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .prompt-tags {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .tag {
+            padding: 4px 10px;
+            background: white;
+            border-radius: 12px;
+            font-size: 11px;
+            color: var(--text-secondary);
+        }
+
+        /* 搜索栏 */
+        .search-bar {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+
+        .search-input {
+            flex: 1;
+            padding: 10px 16px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            font-size: 14px;
+            outline: none;
+            transition: all 0.3s;
+        }
+
+        .search-input:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.1);
+        }
+
+        /* 统计卡片 */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .stat-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: var(--shadow);
+        }
+
+        .stat-card-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 12px;
+            font-size: 18px;
+        }
+
+        .stat-card-icon.blue {
+            background: #ecf5ff;
+            color: var(--primary-color);
+        }
+
+        .stat-card-icon.green {
+            background: #f0f9ff;
+            color: var(--success-color);
+        }
+
+        .stat-card-icon.orange {
+            background: #fdf6ec;
+            color: var(--warning-color);
+        }
+
+        .stat-card-icon.red {
+            background: #fef0f0;
+            color: var(--danger-color);
+        }
+
+        .stat-card-value {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 4px;
+        }
+
+        .stat-card-label {
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        /* 标签页 */
+        .tabs {
+            display: flex;
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 24px;
+        }
+
+        .tab {
+            padding: 12px 24px;
+            cursor: pointer;
+            font-size: 14px;
+            color: var(--text-regular);
+            border-bottom: 2px solid transparent;
+            transition: all 0.3s;
+        }
+
+        .tab:hover {
+            color: var(--primary-color);
+        }
+
+        .tab.active {
+            color: var(--primary-color);
+            border-bottom-color: var(--primary-color);
+        }
+
+        /* 模态框 */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s;
+        }
+
+        .modal-overlay.show {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .modal {
+            background: white;
+            border-radius: 16px;
+            width: 90%;
+            max-width: 600px;
+            max-height: 90vh;
+            overflow: hidden;
+            transform: scale(0.9);
+            transition: all 0.3s;
+        }
+
+        .modal-overlay.show .modal {
+            transform: scale(1);
+        }
+
+        .modal-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .modal-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .modal-close {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .modal-close:hover {
+            background: var(--bg-color);
+        }
+
+        .modal-body {
+            padding: 24px;
+            max-height: 60vh;
+            overflow-y: auto;
+        }
+
+        .modal-footer {
+            padding: 16px 24px;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+        }
+
+        /* 表单 */
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+        }
+
+        .form-input, .form-select, .form-textarea {
+            width: 100%;
+            padding: 10px 14px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            font-size: 14px;
+            outline: none;
+            transition: all 0.3s;
+        }
+
+        .form-input:focus, .form-select:focus, .form-textarea:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.1);
+        }
+
+        .form-textarea {
+            min-height: 120px;
+            resize: vertical;
+        }
+
+        /* 响应式 */
+        @media (max-width: 768px) {
+            .sidebar {
+                transform: translateX(-100%);
+            }
+            .main-content {
+                margin-left: 0;
+            }
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            .result-container {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* 空状态 */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+        }
+
+        .empty-state-icon {
+            font-size: 64px;
+            color: var(--border-color);
+            margin-bottom: 16px;
+        }
+
+        .empty-state-text {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        /* 动画 */
+        .fade-enter-active, .fade-leave-active {
+            transition: opacity 0.3s;
+        }
+
+        .fade-enter-from, .fade-leave-to {
+            opacity: 0;
+        }
+
+        /* 图标样式 */
+        .fa-solid {
+            font-family: 'Font Awesome 6 Free';
+            font-weight: 900;
+        }
+
+        /* 设置页面 */
+        .settings-section {
+            margin-bottom: 32px;
+        }
+
+        .settings-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 16px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .settings-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 0;
+            border-bottom: 1px solid var(--bg-color);
+        }
+
+        .settings-item:last-child {
+            border-bottom: none;
+        }
+
+        .settings-label {
+            font-size: 14px;
+            color: var(--text-primary);
+        }
+
+        .settings-desc {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+
+        /* 导出按钮组 */
+        .export-btns {
+            display: flex;
+            gap: 8px;
+        }
+
+        /* 导航组样式 */
+        .nav-group {
+            margin-bottom: 8px;
+        }
+
+        .nav-group-header {
+            padding: 14px 24px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            color: var(--text-regular);
+            transition: all 0.3s;
+            border-left: 3px solid transparent;
+            justify-content: space-between;
+        }
+
+        .nav-group-header:hover {
+            background: var(--bg-color);
+            color: var(--primary-color);
+        }
+
+        .nav-group-header.active {
+            background: linear-gradient(90deg, rgba(64, 158, 255, 0.1), transparent);
+            color: var(--primary-color);
+            border-left-color: var(--primary-color);
+        }
+
+        .nav-group-content {
+            display: none;
+            background: rgba(0, 0, 0, 0.02);
+        }
+
+        .nav-group-content.show {
+            display: block;
+        }
+
+        .nav-group-content .nav-item {
+            padding-left: 48px;
+            border-left: none;
+        }
+
+        .nav-arrow {
+            font-size: 12px;
+            transition: transform 0.3s;
+        }
+
+        .nav-arrow.rotate {
+            transform: rotate(180deg);
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- 左侧导航 -->
+        <aside class="sidebar">
+            <div class="logo">
+                <div class="logo-icon">
+                    <i class="fa-solid fa-file-shield"></i>
+                </div>
+                <div class="logo-text">智能文档<br>关键信息提取</div>
+            </div>
+            <nav class="nav-menu">
+                <!-- 任务管理 -->
+                <div class="nav-group">
+                    <div class="nav-group-header active" onclick="toggleNavGroup(this)">
+                        <i class="fa-solid fa-list-check"></i>
+                        <span>任务管理</span>
+                        <i class="fa-solid fa-chevron-down nav-arrow rotate"></i>
+                    </div>
+                    <div class="nav-group-content show">
+                        <div class="nav-item active" data-page="upload">
+                            <i class="fa-solid fa-cloud-arrow-up"></i>
+                            <span>文档上传</span>
+                        </div>
+                        <div class="nav-item" data-page="tasks">
+                            <i class="fa-solid fa-list-check"></i>
+                            <span>任务列表</span>
+                        </div>
+                        <div class="nav-item" data-page="results">
+                            <i class="fa-solid fa-clipboard-list"></i>
+                            <span>提取结果</span>
+                        </div>
+                        <div class="nav-item" data-page="history">
+                            <i class="fa-solid fa-clock-rotate-left"></i>
+                            <span>历史记录</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 模型管理 -->
+                <div class="nav-group">
+                    <div class="nav-group-header" onclick="toggleNavGroup(this)">
+                        <i class="fa-solid fa-brain"></i>
+                        <span>模型管理</span>
+                        <i class="fa-solid fa-chevron-down nav-arrow"></i>
+                    </div>
+                    <div class="nav-group-content">
+                        <div class="nav-item" data-page="models">
+                            <i class="fa-solid fa-brain"></i>
+                            <span>模型配置</span>
+                        </div>
+                        <div class="nav-item" data-page="dify">
+                            <i class="fa-solid fa-diagram-project"></i>
+                            <span>Dify管理</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 其他管理 -->
+                <div class="nav-group">
+                    <div class="nav-group-header" onclick="toggleNavGroup(this)">
+                        <i class="fa-solid fa-tools"></i>
+                        <span>其他管理</span>
+                        <i class="fa-solid fa-chevron-down nav-arrow"></i>
+                    </div>
+                    <div class="nav-group-content">
+                        <div class="nav-item" data-page="prompts">
+                            <i class="fa-solid fa-wand-magic-sparkles"></i>
+                            <span>提示词管理</span>
+                        </div>
+                        <div class="nav-item" data-page="settings">
+                            <i class="fa-solid fa-gear"></i>
+                            <span>系统设置</span>
+                        </div>
+                    </div>
+                </div>
+            </nav>
+        </aside>
+
+        <!-- 主内容区 -->
+        <main class="main-content">
+            <!-- 顶部导航 -->
+            <header class="topbar">
+                <div class="topbar-left">
+                    <div class="breadcrumb">
+                        <span id="pageName">文档上传</span>
+                    </div>
+                </div>
+                <div class="topbar-right">
+                    <div class="model-selector">
+                        <div class="model-status"></div>
+                        <span id="currentModel">Qwen2.5:7b</span>
+                        <i class="fa-solid fa-chevron-down"></i>
+                    </div>
+                    <button class="icon-btn">
+                        <i class="fa-solid fa-bell"></i>
+                    </button>
+                    <button class="icon-btn">
+                        <i class="fa-solid fa-circle-question"></i>
+                    </button>
+                </div>
+            </header>
+
+            <!-- 页面内容 -->
+            <div class="page-content">
+                <!-- 文档上传页面 -->
+                <div id="page-upload" class="page">
+                    <div class="page-header">
+                        <h1 class="page-title">文档上传</h1>
+                        <p class="page-desc">拖拽或点击上传需要提取关键信息的文档</p>
+                    </div>
+
+                    <div class="card">
+                        <div class="upload-area" id="uploadArea">
+                            <i class="fa-solid fa-cloud-arrow-up upload-icon"></i>
+                            <div class="upload-text">将文件拖放到此处，或 <span style="color: var(--primary-color);">点击上传</span></div>
+                            <div class="upload-hint">支持批量上传，单个文件大小不超过 50MB</div>
+                            <div class="file-types">
+                                <span class="file-type-badge">PDF</span>
+                                <span class="file-type-badge">Word</span>
+                                <span class="file-type-badge">图片</span>
+                                <span class="file-type-badge">TXT</span>
+                                <span class="file-type-badge">Excel</span>
+                            </div>
+                            <input type="file" id="fileInput" multiple accept=".pdf,.docx,.doc,.jpg,.jpeg,.png,.txt,.xlsx,.xls" style="display: none;">
+                        </div>
+
+                        <div class="file-list" id="fileList">
+                            <!-- 文件列表将动态添加 -->
+                        </div>
+
+                        <div style="margin-top: 24px; text-align: right;">
+                            <button class="btn btn-primary" id="startProcess">
+                                <i class="fa-solid fa-play"></i>
+                                开始提取
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 任务管理页面 -->
+                <div id="page-tasks" class="page" style="display: none;">
+                    <div class="page-header">
+                        <h1 class="page-title">任务管理</h1>
+                        <p class="page-desc">查看和管理所有文档提取任务</p>
+                    </div>
+
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-card-icon blue">
+                                <i class="fa-solid fa-clock"></i>
+                            </div>
+                            <div class="stat-card-value">12</div>
+                            <div class="stat-card-label">待处理</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-card-icon orange">
+                                <i class="fa-solid fa-spinner"></i>
+                            </div>
+                            <div class="stat-card-value">3</div>
+                            <div class="stat-card-label">处理中</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-card-icon green">
+                                <i class="fa-solid fa-check-circle"></i>
+                            </div>
+                            <div class="stat-card-value">156</div>
+                            <div class="stat-card-label">已完成</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-card-icon red">
+                                <i class="fa-solid fa-circle-exclamation"></i>
+                            </div>
+                            <div class="stat-card-value">2</div>
+                            <div class="stat-card-label">失败</div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-title">任务队列</span>
+                            <button class="btn btn-outline btn-sm">
+                                <i class="fa-solid fa-filter"></i>
+                                筛选
+                            </button>
+                        </div>
+
+                        <div class="task-queue" id="taskQueue">
+                            <div class="task-card">
+                                <div class="task-header">
+                                    <span class="task-name">年度报告2025.pdf</span>
+                                    <span class="status-badge success">已完成</span>
+                                </div>
+                                <div class="task-info">
+                                    <span class="task-info-item">
+                                        <i class="fa-solid fa-clock"></i>
+                                        2026-04-03 14:30
+                                    </span>
+                                    <span class="task-info-item">
+                                        <i class="fa-solid fa-gauge-high"></i>
+                                        1.2s
+                                    </span>
+                                </div>
+                                <div class="task-actions">
+                                    <button class="btn btn-outline btn-sm">查看结果</button>
+                                    <button class="btn btn-outline btn-sm">删除</button>
+                                </div>
+                            </div>
+
+                            <div class="task-card">
+                                <div class="task-header">
+                                    <span class="task-name">合同文档.docx</span>
+                                    <span class="status-badge processing">处理中</span>
+                                </div>
+                                <div class="task-info">
+                                    <span class="task-info-item">
+                                        <i class="fa-solid fa-clock"></i>
+                                        2026-04-03 14:28
+                                    </span>
+                                    <span class="task-info-item">
+                                        <div class="progress-bar">
+                                            <div class="progress-inner" style="width: 65%;"></div>
+                                        </div>
+                                    </span>
+                                </div>
+                                <div class="task-actions">
+                                    <button class="btn btn-outline btn-sm">取消</button>
+                                </div>
+                            </div>
+
+                            <div class="task-card">
+                                <div class="task-header">
+                                    <span class="task-name">发票扫描件.jpg</span>
+                                    <span class="status-badge pending">等待中</span>
+                                </div>
+                                <div class="task-info">
+                                    <span class="task-info-item">
+                                        <i class="fa-solid fa-clock"></i>
+                                        2026-04-03 14:25
+                                    </span>
+                                </div>
+                                <div class="task-actions">
+                                    <button class="btn btn-outline btn-sm">开始</button>
+                                    <button class="btn btn-outline btn-sm">删除</button>
+                                </div>
+                            </div>
+
+                            <div class="task-card">
+                                <div class="task-header">
+                                    <span class="task-name">技术方案.pdf</span>
+                                    <span class="status-badge error">失败</span>
+                                </div>
+                                <div class="task-info">
+                                    <span class="task-info-item">
+                                        <i class="fa-solid fa-clock"></i>
+                                        2026-04-03 14:20
+                                    </span>
+                                    <span class="task-info-item" style="color: var(--danger-color);">
+                                        <i class="fa-solid fa-circle-exclamation"></i>
+                                        解析失败
+                                    </span>
+                                </div>
+                                <div class="task-actions">
+                                    <button class="btn btn-outline btn-sm">重试</button>
+                                    <button class="btn btn-outline btn-sm">删除</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 提取结果页面 -->
+                <div id="page-results" class="page" style="display: none;">
+                    <div class="page-header">
+                        <h1 class="page-title">提取结果</h1>
+                        <p class="page-desc">查看文档关键信息提取结果</p>
+                    </div>
+
+                    <div class="card">
+                        <div class="tabs">
+                            <div class="tab active">当前结果</div>
+                            <div class="tab">结果对比</div>
+                        </div>
+
+                        <div class="result-container">
+                            <div class="result-panel">
+                                <div class="result-panel-header">
+                                    <span class="result-panel-title">
+                                        <i class="fa-solid fa-file-lines"></i>
+                                        原文预览
+                                    </span>
+                                    <button class="btn btn-outline btn-sm">
+                                        <i class="fa-solid fa-expand"></i>
+                                    </button>
+                                </div>
+                                <div class="result-panel-content">
+2025年度工作报告
+
+尊敬的各位领导、同事们：
+
+大家好！我是市场部经理李明。今天我代表市场部向大家汇报2025年度工作总结。
+
+一、年度业绩回顾
+2025年，市场部在公司的正确领导下，紧紧围绕年度经营目标，扎实推进各项工作。全年实现销售收入2.8亿元，同比增长15%，超额完成年度任务目标的12%。
+
+二、主要工作举措
+1. 品牌建设：投入品牌推广费用1500万元，开展线上线下营销活动80余场，品牌知名度提升30%。
+2. 渠道拓展：新开拓区域代理商15家，覆盖全国28个省市自治区。
+3. 产品创新：推出3款新产品，满足不同客户群体的需求。
+4. 客户服务：建立客户满意度跟踪机制，满意率达95%以上。
+
+三、2026年工作展望
+新的一年，我们将继续坚持以客户为中心，提升服务质量，预计实现销售收入3.5亿元的目标。
+
+谢谢大家！
+                                </div>
+                            </div>
+
+                            <div class="result-panel">
+                                <div class="result-panel-header">
+                                    <span class="result-panel-title">
+                                        <i class="fa-solid fa-lightbulb"></i>
+                                        提取结果
+                                    </span>
+                                    <div class="export-btns">
+                                        <button class="btn btn-outline btn-sm" onclick="copyResult()">
+                                            <i class="fa-solid fa-copy"></i>
+                                            复制
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="result-panel-content">
+┌─────────────────────────────────────┐
+│           关键信息提取结果              │
+├─────────────────────────────────────┤
+│ 文档类型：年度工作报告                  │
+│                                    │
+│ 【核心数据】                           │
+│ • 销售收入：2.8亿元                   │
+│ • 同比增长：15%                       │
+│ • 任务完成率：112%                    │
+│                                    │
+│ 【关键指标】                           │
+│ • 品牌推广投入：1500万元               │
+│ • 营销活动：80余场                    │
+│ • 品牌知名度提升：30%                 │
+│ • 新增代理商：15家                    │
+│ • 客户满意度：95%以上                  │
+│                                    │
+│ 【2026年目标】                        │
+│ • 销售收入目标：3.5亿元               │
+│ • 核心战略：以客户为中心               │
+└─────────────────────────────────────┘
+                                </div>
+                            </div>
+                        </div>
+
+                        <div style="margin-top: 24px; display: flex; gap: 12px; justify-content: flex-end;">
+                            <button class="btn btn-outline">
+                                <i class="fa-solid fa-file-export"></i>
+                                导出JSON
+                            </button>
+                            <button class="btn btn-outline">
+                                <i class="fa-solid fa-file-word"></i>
+                                导出Word
+                            </button>
+                            <button class="btn btn-outline">
+                                <i class="fa-solid fa-file-lines"></i>
+                                导出Markdown
+                            </button>
+                            <button class="btn btn-primary">
+                                <i class="fa-solid fa-floppy-disk"></i>
+                                保存结果
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 历史记录页面 -->
+                <div id="page-history" class="page" style="display: none;">
+                    <div class="page-header">
+                        <h1 class="page-title">历史记录</h1>
+                        <p class="page-desc">查看历史提取记录，支持多维度检索</p>
+                    </div>
+
+                    <div class="card">
+                        <div class="search-bar">
+                            <input type="text" class="search-input" placeholder="搜索文件名或内容关键词...">
+                            <input type="text" class="search-input" placeholder="选择日期范围" style="width: 200px;">
+                            <button class="btn btn-primary">
+                                <i class="fa-solid fa-magnifying-glass"></i>
+                                搜索
+                            </button>
+                        </div>
+
+                        <div class="history-list">
+                            <div class="history-item">
+                                <div class="history-icon">
+                                    <i class="fa-solid fa-file-pdf"></i>
+                                </div>
+                                <div class="history-content">
+                                    <div class="history-title">年度报告2025.pdf</div>
+                                    <div class="history-meta">提取时间：2026-04-03 14:30 | 耗时：1.2s</div>
+                                </div>
+                                <div class="history-actions">
+                                    <button class="btn btn-outline btn-sm">查看</button>
+                                    <button class="btn btn-outline btn-sm">导出</button>
+                                    <button class="btn btn-outline btn-sm">删除</button>
+                                </div>
+                            </div>
+
+                            <div class="history-item">
+                                <div class="history-icon">
+                                    <i class="fa-solid fa-file-word"></i>
+                                </div>
+                                <div class="history-content">
+                                    <div class="history-title">劳动合同样本.docx</div>
+                                    <div class="history-meta">提取时间：2026-04-03 10:15 | 耗时：2.1s</div>
+                                </div>
+                                <div class="history-actions">
+                                    <button class="btn btn-outline btn-sm">查看</button>
+                                    <button class="btn btn-outline btn-sm">导出</button>
+                                    <button class="btn btn-outline btn-sm">删除</button>
+                                </div>
+                            </div>
+
+                            <div class="history-item">
+                                <div class="history-icon">
+                                    <i class="fa-solid fa-image"></i>
+                                </div>
+                                <div class="history-content">
+                                    <div class="history-title">发票扫描件.jpg</div>
+                                    <div class="history-meta">提取时间：2026-04-02 16:45 | 耗时：3.5s</div>
+                                </div>
+                                <div class="history-actions">
+                                    <button class="btn btn-outline btn-sm">查看</button>
+                                    <button class="btn btn-outline btn-sm">导出</button>
+                                    <button class="btn btn-outline btn-sm">删除</button>
+                                </div>
+                            </div>
+
+                            <div class="history-item">
+                                <div class="history-icon">
+                                    <i class="fa-solid fa-file-excel"></i>
+                                </div>
+                                <div class="history-content">
+                                    <div class="history-title">财务报表Q4.xlsx</div>
+                                    <div class="history-meta">提取时间：2026-04-02 09:30 | 耗时：1.8s</div>
+                                </div>
+                                <div class="history-actions">
+                                    <button class="btn btn-outline btn-sm">查看</button>
+                                    <button class="btn btn-outline btn-sm">导出</button>
+                                    <button class="btn btn-outline btn-sm">删除</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div style="margin-top: 24px; text-align: center;">
+                            <button class="btn btn-outline">
+                                <i class="fa-solid fa-download"></i>
+                                导出全部记录
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Dify管理页面 -->
+                <div id="page-dify" class="page" style="display: none;">
+                    <div class="page-header">
+                        <h1 class="page-title">Dify/OpenClaw 管理</h1>
+                        <p class="page-desc">管理工作流配置和技能设置</p>
+                    </div>
+
+                    <div class="card">
+                        <div class="tabs">
+                            <div class="tab active">工作流管理</div>
+                            <div class="tab">Skill管理</div>
+                            <div class="tab">后端设置</div>
+                        </div>
+
+                        <div class="search-bar">
+                            <input type="text" class="search-input" placeholder="搜索工作流...">
+                            <button class="btn btn-primary">
+                                <i class="fa-solid fa-plus"></i>
+                                新建工作流
+                            </button>
+                        </div>
+
+                        <div class="task-queue">
+                            <div class="task-card" style="cursor: default;">
+                                <div class="task-header">
+                                    <span class="task-name">通用文档提取</span>
+                                    <span class="status-badge success">已启用</span>
+                                </div>
+                                <p style="font-size: 12px; color: var(--text-secondary); margin: 12px 0;">
+                                    适用于常见文档类型的关键信息提取
+                                </p>
+                                <div class="task-actions">
+                                    <button class="btn btn-outline btn-sm">编辑</button>
+                                    <button class="btn btn-outline btn-sm">复制</button>
+                                </div>
+                            </div>
+
+                            <div class="task-card" style="cursor: default;">
+                                <div class="task-header">
+                                    <span class="task-name">合同模板提取</span>
+                                    <span class="status-badge success">已启用</span>
+                                </div>
+                                <p style="font-size: 12px; color: var(--text-secondary); margin: 12px 0;">
+                                    专门针对合同文档的结构化信息提取
+                                </p>
+                                <div class="task-actions">
+                                    <button class="btn btn-outline btn-sm">编辑</button>
+                                    <button class="btn btn-outline btn-sm">复制</button>
+                                </div>
+                            </div>
+
+                            <div class="task-card" style="cursor: default;">
+                                <div class="task-header">
+                                    <span class="task-name">财务票据识别</span>
+                                    <span class="status-badge success">已启用</span>
+                                </div>
+                                <p style="font-size: 12px; color: var(--text-secondary); margin: 12px 0;">
+                                    发票、收据等财务票据的关键信息提取
+                                </p>
+                                <div class="task-actions">
+                                    <button class="btn btn-outline btn-sm">编辑</button>
+                                    <button class="btn btn-outline btn-sm">复制</button>
+                                </div>
+                            </div>
+
+                            <div class="task-card" style="cursor: default;">
+                                <div class="task-header">
+                                    <span class="task-name">智能问答</span>
+                                    <span class="status-badge pending">未启用</span>
+                                </div>
+                                <p style="font-size: 12px; color: var(--text-secondary); margin: 12px 0;">
+                                    基于文档内容的智能问答系统
+                                </p>
+                                <div class="task-actions">
+                                    <button class="btn btn-outline btn-sm">编辑</button>
+                                    <button class="btn btn-outline btn-sm">启用</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 模型管理页面 -->
+                <div id="page-models" class="page" style="display: none;">
+                    <div class="page-header">
+                        <h1 class="page-title">模型管理</h1>
+                        <p class="page-desc">选择和管理本地大模型</p>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-title">可用模型</span>
+                            <button class="btn btn-primary btn-sm">
+                                <i class="fa-solid fa-download"></i>
+                                下载模型
+                            </button>
+                        </div>
+
+                        <div class="model-list">
+                            <div class="model-card active">
+                                <div class="model-info">
+                                    <div class="model-icon">
+                                        <i class="fa-solid fa-brain"></i>
+                                    </div>
+                                    <div>
+                                        <div class="model-name">Qwen2.5:7b</div>
+                                        <div class="model-desc">当前使用 · 阿里云通义千问</div>
+                                    </div>
+                                </div>
+                                <div class="model-stats">
+                                    <div class="stat-item">
+                                        <div class="stat-value">7B</div>
+                                        <div class="stat-label">参数</div>
+                                    </div>
+                                    <div class="stat-item">
+                                        <div class="stat-value">4.7GB</div>
+                                        <div class="stat-label">大小</div>
+                                    </div>
+                                    <div class="stat-item">
+                                        <div class="stat-value" style="color: var(--success-color);">
+                                            <i class="fa-solid fa-circle-check"></i>
+                                        </div>
+                                        <div class="stat-label">状态</div>
+                                    </div>
+                                </div>
+                                <button class="btn btn-success btn-sm">使用中</button>
+                            </div>
+
+                            <div class="model-card">
+                                <div class="model-info">
+                                    <div class="model-icon">
+                                        <i class="fa-solid fa-brain"></i>
+                                    </div>
+                                    <div>
+                                        <div class="model-name">llama3.2:3b</div>
+                                        <div class="model-desc">Meta Llama 3.2</div>
+                                    </div>
+                                </div>
+                                <div class="model-stats">
+                                    <div class="stat-item">
+                                        <div class="stat-value">3B</div>
+                                        <div class="stat-label">参数</div>
+                                    </div>
+                                    <div class="stat-item">
+                                        <div class="stat-value">2.1GB</div>
+                                        <div class="stat-label">大小</div>
+                                    </div>
+                                    <div class="stat-item">
+                                        <div class="stat-value" style="color: var(--success-color);">
+                                            <i class="fa-solid fa-circle-check"></i>
+                                        </div>
+                                        <div class="stat-label">状态</div>
+                                    </div>
+                                </div>
+                                <button class="btn btn-outline btn-sm">切换</button>
+                            </div>
+
+                            <div class="model-card">
+                                <div class="model-info">
+                                    <div class="model-icon">
+                                        <i class="fa-solid fa-brain"></i>
+                                    </div>
+                                    <div>
+                                        <div class="model-name">qwen2.5:14b</div>
+                                        <div class="model-desc">阿里云通义千问</div>
+                                    </div>
+                                </div>
+                                <div class="model-stats">
+                                    <div class="stat-item">
+                                        <div class="stat-value">14B</div>
+                                        <div class="stat-label">参数</div>
+                                    </div>
+                                    <div class="stat-item">
+                                        <div class="stat-value">9.2GB</div>
+                                        <div class="stat-label">大小</div>
+                                    </div>
+                                    <div class="stat-item">
+                                        <div class="stat-value" style="color: var(--text-secondary);">
+                                            <i class="fa-solid fa-download"></i>
+                                        </div>
+                                        <div class="stat-label">未下载</div>
+                                    </div>
+                                </div>
+                                <button class="btn btn-outline btn-sm">下载</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 提示词管理页面 -->
+                <div id="page-prompts" class="page" style="display: none;">
+                    <div class="page-header">
+                        <h1 class="page-title">提示词管理</h1>
+                        <p class="page-desc">管理和优化提取提示词模板</p>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-title">提示词模板库</span>
+                            <button class="btn btn-primary btn-sm">
+                                <i class="fa-solid fa-plus"></i>
+                                新建模板
+                            </button>
+                        </div>
+
+                        <div class="search-bar">
+                            <input type="text" class="search-input" placeholder="搜索提示词模板...">
+                        </div>
+
+                        <div class="prompt-list">
+                            <div class="prompt-card">
+                                <div class="prompt-title">通用信息提取</div>
+                                <div class="prompt-preview">
+                                    请从以下文档中提取所有关键信息，包括：1. 文档类型和主题 2. 关键数据和数字 3. 重要人物和机构 4. 日期和时间信息 5. 其他重要信息...
+                                </div>
+                                <div class="prompt-tags">
+                                    <span class="tag">通用</span>
+                                    <span class="tag">默认</span>
+                                </div>
+                            </div>
+
+                            <div class="prompt-card">
+                                <div class="prompt-title">合同关键条款</div>
+                                <div class="prompt-preview">
+                                    请从合同文档中提取以下关键信息：1. 合同双方信息 2. 合同金额和付款方式 3. 合同期限 4. 违约责任 5. 争议解决方式...
+                                </div>
+                                <div class="prompt-tags">
+                                    <span class="tag">合同</span>
+                                    <span class="tag">条款</span>
+                                </div>
+                            </div>
+
+                            <div class="prompt-card">
+                                <div class="prompt-title">财务报表分析</div>
+                                <div class="prompt-preview">
+                                    请分析财务报表，提取以下关键指标：1. 收入和利润数据 2. 资产负债情况 3. 现金流状况 4. 主要财务比率 5. 同比/环比变化...
+                                </div>
+                                <div class="prompt-tags">
+                                    <span class="tag">财务</span>
+                                    <span class="tag">分析</span>
+                                </div>
+                            </div>
+
+                            <div class="prompt-card">
+                                <div class="prompt-title">会议纪要提取</div>
+                                <div class="prompt-preview">
+                                    请从会议纪要中提取：1. 会议主题和时间 2. 参会人员 3. 讨论的主要议题 4. 决策事项 5. 行动计划和负责人...
+                                </div>
+                                <div class="prompt-tags">
+                                    <span class="tag">会议</span>
+                                    <span class="tag">纪要</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-title">关键词规则</span>
+                            <button class="btn btn-primary btn-sm">
+                                <i class="fa-solid fa-plus"></i>
+                                添加规则
+                            </button>
+                        </div>
+
+                        <div class="history-list">
+                            <div class="history-item">
+                                <div class="history-icon" style="background: #fef0f0; color: var(--danger-color);">
+                                    <i class="fa-solid fa-wand-sparkles"></i>
+                                </div>
+                                <div class="history-content">
+                                    <div class="history-title">金额识别规则</div>
+                                    <div class="history-meta">匹配模式：¥\d+(\.\d+)?(万|亿|元) | 命中次数：1,234</div>
+                                </div>
+                                <div class="history-actions">
+                                    <button class="btn btn-outline btn-sm">编辑</button>
+                                    <button class="btn btn-outline btn-sm">删除</button>
+                                </div>
+                            </div>
+
+                            <div class="history-item">
+                                <div class="history-icon" style="background: #fdf6ec; color: var(--warning-color);">
+                                    <i class="fa-solid fa-wand-sparkles"></i>
+                                </div>
+                                <div class="history-content">
+                                    <div class="history-title">日期识别规则</div>
+                                    <div class="history-meta">匹配模式：\d{4}年\d{1,2}月\d{1,2}日 | 命中次数：2,567</div>
+                                </div>
+                                <div class="history-actions">
+                                    <button class="btn btn-outline btn-sm">编辑</button>
+                                    <button class="btn btn-outline btn-sm">删除</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 系统设置页面 -->
+                <div id="page-settings" class="page" style="display: none;">
+                    <div class="page-header">
+                        <h1 class="page-title">系统设置</h1>
+                        <p class="page-desc">配置系统参数和首选项</p>
+                    </div>
+
+                    <div class="card">
+                        <div class="settings-section">
+                            <div class="settings-title">通用设置</div>
+
+                            <div class="settings-item">
+                                <div>
+                                    <div class="settings-label">自动处理上传文件</div>
+                                    <div class="settings-desc">文件上传后自动开始处理，无需手动点击开始</div>
+                                </div>
+                                <label style="position: relative; width: 44px; height: 24px;">
+                                    <input type="checkbox" style="opacity: 0; width: 0; height: 0;">
+                                    <span style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: var(--border-color); border-radius: 24px; transition: 0.3s;"></span>
+                                </label>
+                            </div>
+
+                            <div class="settings-item">
+                                <div>
+                                    <div class="settings-label">处理完成后自动打开结果</div>
+                                    <div class="settings-desc">任务完成后自动跳转到结果页面</div>
+                                </div>
+                                <label style="position: relative; width: 44px; height: 24px;">
+                                    <input type="checkbox" checked style="opacity: 0; width: 0; height: 0;">
+                                    <span style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: var(--primary-color); border-radius: 24px; transition: 0.3s;"></span>
+                                </label>
+                            </div>
+
+                            <div class="settings-item">
+                                <div>
+                                    <div class="settings-label">默认导出格式</div>
+                                    <div class="settings-desc">提取结果默认导出的文件格式</div>
+                                </div>
+                                <select class="form-select" style="width: 150px;">
+                                    <option>JSON</option>
+                                    <option>Markdown</option>
+                                    <option>Word</option>
+                                    <option>文本</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="settings-section">
+                            <div class="settings-title">后端设置</div>
+
+                            <div class="settings-item">
+                                <div>
+                                    <div class="settings-label">选择后端服务</div>
+                                    <div class="settings-desc">选择使用 Ollama 或 OpenClaw 作为后端</div>
+                                </div>
+                                <select class="form-select" style="width: 150px;">
+                                    <option>Ollama</option>
+                                    <option>OpenClaw</option>
+                                    <option>Dify</option>
+                                </select>
+                            </div>
+
+                            <div class="settings-item">
+                                <div>
+                                    <div class="settings-label">Ollama 地址</div>
+                                    <div class="settings-desc">本地 Ollama 服务的地址</div>
+                                </div>
+                                <input type="text" class="form-input" value="http://localhost:11434" style="width: 200px;">
+                            </div>
+
+                            <div class="settings-item">
+                                <div>
+                                    <div class="settings-label">API 密钥</div>
+                                    <div class="settings-desc">用于认证的 API 密钥（可选）</div>
+                                </div>
+                                <input type="password" class="form-input" value="" placeholder="未设置" style="width: 200px;">
+                            </div>
+                        </div>
+
+                        <div class="settings-section">
+                            <div class="settings-title">性能设置</div>
+
+                            <div class="settings-item">
+                                <div>
+                                    <div class="settings-label">最大并发任务数</div>
+                                    <div class="settings-desc">同时处理的最大任务数量</div>
+                                </div>
+                                <input type="number" class="form-input" value="3" min="1" max="10" style="width: 100px;">
+                            </div>
+
+                            <div class="settings-item">
+                                <div>
+                                    <div class="settings-label">模型响应超时</div>
+                                    <div class="settings-desc">等待模型响应的最长时间（秒）</div>
+                                </div>
+                                <input type="number" class="form-input" value="120" min="30" max="600" style="width: 100px;">
+                            </div>
+
+                            <div class="settings-item">
+                                <div>
+                                    <div class="settings-label">启用响应缓存</div>
+                                    <div class="settings-desc">缓存相同文件的处理结果以提升速度</div>
+                                </div>
+                                <label style="position: relative; width: 44px; height: 24px;">
+                                    <input type="checkbox" checked style="opacity: 0; width: 0; height: 0;">
+                                    <span style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: var(--primary-color); border-radius: 24px; transition: 0.3s;"></span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div style="margin-top: 24px; text-align: right;">
+                            <button class="btn btn-primary">
+                                <i class="fa-solid fa-check"></i>
+                                保存设置
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- 新建任务弹窗 -->
+    <div class="modal-overlay" id="newTaskModal">
+        <div class="modal">
+            <div class="modal-header">
+                <span class="modal-title">新建提取任务</span>
+                <div class="modal-close" onclick="closeModal()">
+                    <i class="fa-solid fa-xmark"></i>
+                </div>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">选择文件</label>
+                    <div class="upload-area" style="padding: 24px;">
+                        <i class="fa-solid fa-cloud-arrow-up" style="font-size: 32px; color: var(--primary-color);"></i>
+                        <div style="margin-top: 8px;">点击或拖拽文件到这里</div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">选择工作流</label>
+                    <select class="form-select">
+                        <option>通用文档提取</option>
+                        <option>合同模板提取</option>
+                        <option>财务票据识别</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">选择提示词模板</label>
+                    <select class="form-select">
+                        <option>通用信息提取</option>
+                        <option>合同关键条款</option>
+                        <option>财务报表分析</option>
+                        <option>会议纪要提取</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="closeModal()">取消</button>
+                <button class="btn btn-primary" onclick="closeModal()">创建任务</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/vue@3.4.15/dist/vue.global.prod.js">
+        // Toggle navigation group
+        function toggleNavGroup(header) {
+            const content = header.nextElementSibling;
+            const arrow = header.querySelector('.nav-arrow');
+
+            // Close all other groups
+            document.querySelectorAll('.nav-group-header').forEach(h => {
+                if (h !== header) {
+                    h.classList.remove('active');
+                    h.querySelector('.nav-arrow').classList.remove('rotate');
+                    h.nextElementSibling.classList.remove('show');
+                }
+            });
+
+            // Toggle current group
+            header.classList.toggle('active');
+            arrow.classList.toggle('rotate');
+            content.classList.toggle('show');
+        }
+</script>
+    <script src="https://cdn.jsdelivr.net/npm/element-plus@2.4.4/dist/index.full.js">
+        // Toggle navigation group
+        function toggleNavGroup(header) {
+            const content = header.nextElementSibling;
+            const arrow = header.querySelector('.nav-arrow');
+
+            // Close all other groups
+            document.querySelectorAll('.nav-group-header').forEach(h => {
+                if (h !== header) {
+                    h.classList.remove('active');
+                    h.querySelector('.nav-arrow').classList.remove('rotate');
+                    h.nextElementSibling.classList.remove('show');
+                }
+            });
+
+            // Toggle current group
+            header.classList.toggle('active');
+            arrow.classList.toggle('rotate');
+            content.classList.toggle('show');
+        }
+</script>
+    <script>
+        // 页面导航
+        const navItems = document.querySelectorAll('.nav-item');
+        const pages = document.querySelectorAll('.page');
+        const pageName = document.getElementById('pageName');
+        const pageNames = {
+            'upload': '文档上传',
+            'tasks': '任务管理',
+            'results': '提取结果',
+            'history': '历史记录',
+            'dify': 'Dify管理',
+            'models': '模型管理',
+            'prompts': '提示词管理',
+            'settings': '系统设置'
+        };
+
+        navItems.forEach(item => {
+            item.addEventListener('click', function() {
+                const page = this.getAttribute('data-page');
+                
+                navItems.forEach(nav => nav.classList.remove('active'));
+                this.classList.add('active');
+                
+                pages.forEach(p => p.style.display = 'none');
+                document.getElementById('page-' + page).style.display = 'block';
+                
+                pageName.textContent = pageNames[page];
+            });
+        });
+
+        // 文件上传
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const fileList = document.getElementById('fileList');
+        let files = [];
+
+        uploadArea.addEventListener('click', () => fileInput.click());
+
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            handleFiles(e.dataTransfer.files);
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            handleFiles(e.target.files);
+        });
+
+        function handleFiles(fileList) {
+            Array.from(fileList).forEach(file => {
+                files.push(file);
+                addFileItem(file);
+            });
+        }
+
+        function addFileItem(file) {
+            const div = document.createElement('div');
+            div.className = 'file-item';
+            div.innerHTML = `
+                <div class="file-info">
+                    <div class="file-icon">
+                        <i class="fa-solid fa-file-${getFileIcon(file.name)}"></i>
+                    </div>
+                    <div>
+                        <div class="file-name">${file.name}</div>
+                        <div class="file-size">${formatFileSize(file.size)}</div>
+                    </div>
+                </div>
+                <div class="file-status">
+                    <span class="status-badge pending">等待中</span>
+                    <button class="btn btn-outline btn-sm" onclick="removeFile(this, '${file.name}')">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                </div>
+            `;
+            fileList.appendChild(div);
+        }
+
+        function getFileIcon(filename) {
+            const ext = filename.split('.').pop().toLowerCase();
+            const icons = {
+                'pdf': 'pdf',
+                'doc': 'word',
+                'docx': 'word',
+                'xls': 'excel',
+                'xlsx': 'excel',
+                'jpg': 'image',
+                'jpeg': 'image',
+                'png': 'image',
+                'txt': 'lines'
+            };
+            return icons[ext] || 'lines';
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+
+        function removeFile(btn, filename) {
+            files = files.filter(f => f.name !== filename);
+            btn.closest('.file-item').remove();
+        }
+
+        // 开始处理
+        document.getElementById('startProcess').addEventListener('click', function() {
+            if (files.length === 0) {
+                alert('请先上传文件');
+                return;
+            }
+            
+            // 模拟处理过程
+            const fileItems = document.querySelectorAll('.file-item');
+            fileItems.forEach((item, index) => {
+                const badge = item.querySelector('.status-badge');
+                setTimeout(() => {
+                    badge.className = 'status-badge processing';
+                    badge.textContent = '处理中';
+                    
+                    setTimeout(() => {
+                        badge.className = 'status-badge success';
+                        badge.textContent = '已完成';
+                    }, 2000 + index * 1000);
+                }, index * 500);
+            });
+        });
+
+        // 复制结果
+        function copyResult() {
+            const resultContent = document.querySelector('#page-results .result-panel:last-child .result-panel-content').textContent;
+            navigator.clipboard.writeText(resultContent).then(() => {
+                alert('已复制到剪贴板');
+            });
+        }
+
+        // 模态框
+        function closeModal() {
+            document.getElementById('newTaskModal').classList.remove('show');
+        }
+
+        // 标签页切换
+        document.querySelectorAll('.tabs .tab').forEach(tab => {
+            tab.addEventListener('click', function() {
+                this.parentElement.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                this.classList.add('active');
+            });
+        });
+
+        // 提示词卡片点击
+        document.querySelectorAll('.prompt-card').forEach(card => {
+            card.addEventListener('click', function() {
+                // 可以打开编辑模态框
+                console.log('打开提示词编辑');
+            });
+        });
+
+        // 初始化
+        console.log('智能文档关键信息提取助手已启动');
+    
+        // Toggle navigation group
+        function toggleNavGroup(header) {
+            const content = header.nextElementSibling;
+            const arrow = header.querySelector('.nav-arrow');
+
+            // Close all other groups
+            document.querySelectorAll('.nav-group-header').forEach(h => {
+                if (h !== header) {
+                    h.classList.remove('active');
+                    h.querySelector('.nav-arrow').classList.remove('rotate');
+                    h.nextElementSibling.classList.remove('show');
+                }
+            });
+
+            // Toggle current group
+            header.classList.toggle('active');
+            arrow.classList.toggle('rotate');
+            content.classList.toggle('show');
+        }
+</script>
+</body>
+</html>
